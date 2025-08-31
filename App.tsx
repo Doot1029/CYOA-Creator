@@ -6,9 +6,8 @@ import GameScreen from './components/GameScreen';
 import ExportScreen from './components/ExportScreen';
 import Modal from './components/Modal';
 import StoryMapView from './components/StoryMapView';
-import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode, isApiKeySet } from './services/geminiService';
+import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode } from './services/geminiService';
 import { generatePageMap } from './utils/storyUtils';
-import ApiKeyError from './components/ApiKeyError';
 
 interface ModalConfig {
     type: 'confirm' | 'prompt';
@@ -27,12 +26,6 @@ const App: React.FC = () => {
     const [modalConfig, setModalConfig] = useState<ModalConfig | null>(null);
     const [isMapViewVisible, setIsMapViewVisible] = useState(false);
     const [showPredictions, setShowPredictions] = useState(false);
-
-    // If the API key is not set, render a helpful error screen instead of the app.
-    // This prevents the app from crashing on deployed environments.
-    if (!isApiKeySet) {
-        return <ApiKeyError />;
-    }
 
     const handleStartGame = (initialStory: Story) => {
         setStory(initialStory);
@@ -61,7 +54,7 @@ const App: React.FC = () => {
             setCurrentNodeId(newId);
         } catch (error) {
             console.error("Failed to generate next story node:", error);
-            alert("There was an error generating the next part of the story. Please try again.");
+            alert(`There was an error generating the next part of the story: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setLoading(false);
         }
@@ -137,7 +130,7 @@ const App: React.FC = () => {
 
         } catch (error) {
             console.error("Failed to generate ending path:", error);
-            alert("An error occurred while generating the ending path.");
+            alert(`An error occurred while generating the ending path: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsGeneratingEnding(false);
         }
