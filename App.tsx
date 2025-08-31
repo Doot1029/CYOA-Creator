@@ -6,8 +6,9 @@ import GameScreen from './components/GameScreen';
 import ExportScreen from './components/ExportScreen';
 import Modal from './components/Modal';
 import StoryMapView from './components/StoryMapView';
-import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode } from './services/geminiService';
+import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode, isApiKeySet } from './services/geminiService';
 import { generatePageMap } from './utils/storyUtils';
+import ApiKeyError from './components/ApiKeyError';
 
 interface ModalConfig {
     type: 'confirm' | 'prompt';
@@ -26,6 +27,12 @@ const App: React.FC = () => {
     const [modalConfig, setModalConfig] = useState<ModalConfig | null>(null);
     const [isMapViewVisible, setIsMapViewVisible] = useState(false);
     const [showPredictions, setShowPredictions] = useState(false);
+
+    // If the API key is not set, render a helpful error screen instead of the app.
+    // This prevents the app from crashing on deployed environments.
+    if (!isApiKeySet) {
+        return <ApiKeyError />;
+    }
 
     const handleStartGame = (initialStory: Story) => {
         setStory(initialStory);

@@ -1,11 +1,20 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
+// Check if the API key is available in the environment. This is safe to run in any environment.
+export const isApiKeySet = !!process.env.API_KEY;
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Conditionally initialize the AI client. If the key is not set, `ai` will be null.
+const ai = isApiKeySet ? new GoogleGenAI({ apiKey: process.env.API_KEY! }) : null;
+
+// Helper to ensure the AI client is available before making a call.
+// This throws an error at the time of the call, not on app load.
+const checkAi = () => {
+    if (!ai) {
+        throw new Error("Gemini API key not configured. Please set the API_KEY environment variable in your deployment settings.");
+    }
+    return ai;
+}
 
 const safelyParseJSON = <T,>(jsonString: string): T | null => {
     try {
@@ -32,7 +41,8 @@ const safelyParseJSON = <T,>(jsonString: string): T | null => {
 
 
 export const generateStoryPrompt = async (): Promise<string> => {
-    const response: GenerateContentResponse = await ai.models.generateContent({
+    const gemini = checkAi();
+    const response: GenerateContentResponse = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: 'Generate a one-sentence story prompt for a choose-your-own-adventure visual novel. The theme should be fantasy, sci-fi, or mystery.',
     });
@@ -40,7 +50,8 @@ export const generateStoryPrompt = async (): Promise<string> => {
 };
 
 export const generateTitle = async (storyPrompt: string): Promise<string> => {
-     const response: GenerateContentResponse = await ai.models.generateContent({
+    const gemini = checkAi();
+     const response: GenerateContentResponse = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: `Generate a short, catchy, and creative title for a visual novel with the following prompt: "${storyPrompt}"`,
     });
@@ -48,7 +59,8 @@ export const generateTitle = async (storyPrompt: string): Promise<string> => {
 }
 
 export const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9' | '3:4'): Promise<string> => {
-    const response = await ai.models.generateImages({
+    const gemini = checkAi();
+    const response = await gemini.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: {
@@ -63,6 +75,7 @@ export const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9' 
 };
 
 export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'startNodeId' | 'endNodeIds' | 'coverImageUrl'>): Promise<Omit<StoryNode, 'id'>> => {
+    const gemini = checkAi();
     const prompt = `
         This is the start of a choose-your-own-adventure story.
         Story Prompt: ${story.prompt}
@@ -73,7 +86,7 @@ export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'sta
         Also provide a 'predictionRationale' field explaining your prediction in one short sentence.
     `;
     
-    const response = await ai.models.generateContent({
+    const response = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -112,6 +125,7 @@ export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'sta
 };
 
 export const generateStoryNode = async (story: Story, fromNodeId: string, choiceMade: Choice): Promise<Omit<StoryNode, 'id'>> => {
+    const gemini = checkAi();
     const previousNode = story.nodes[fromNodeId];
     
     const prompt = `
@@ -132,7 +146,7 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
         3. For each new choice, provide a 'prediction' ('good', 'bad', or 'ending') and a short 'predictionRationale'.
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -172,6 +186,7 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
 };
 
 export const generateStoryNodeForEnding = async (story: Story, fromNodeId: string, choiceMade: Choice, step: number, totalSteps: number): Promise<Omit<StoryNode, 'id'>> => {
+    const gemini = checkAi();
     const previousNode = story.nodes[fromNodeId];
     
     const prompt = `
@@ -191,7 +206,7 @@ export const generateStoryNodeForEnding = async (story: Story, fromNodeId: strin
         3. For each choice, provide a 'prediction' (which should be 'ending') and a 'predictionRationale'.
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -231,6 +246,7 @@ export const generateStoryNodeForEnding = async (story: Story, fromNodeId: strin
 };
 
 export const generateFinalEndingNode = async (story: Story, fromNodeId: string, choiceMade: Choice): Promise<{ dialogue: string }> => {
+    const gemini = checkAi();
     const previousNode = story.nodes[fromNodeId];
     
     const prompt = `
@@ -250,7 +266,7 @@ export const generateFinalEndingNode = async (story: Story, fromNodeId: string, 
         3. DO NOT provide any choices.
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
