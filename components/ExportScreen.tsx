@@ -1,7 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Story, StoryNode } from '../types';
-import { BookIcon, RefreshIcon, ArrowLeftIcon, HomeIcon } from './Icon';
+import { BookIcon, RefreshIcon, ArrowLeftIcon, HomeIcon, ZipIcon } from './Icon';
 import { generatePageMap } from '../utils/storyUtils';
+import LoadingSpinner from './LoadingSpinner';
+
+// Declare global variables for libraries loaded via script tags
+declare var htmlToImage: any;
+declare var JSZip: any;
 
 interface ExportScreenProps {
     story: Story;
@@ -26,6 +31,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRestart }) => {
     const [pages, setPages] = useState<Page[]>([]);
+    const [isZipping, setIsZipping] = useState(false);
     
     // Create a stable, logical mapping of node IDs to page numbers
     const logicalPageMap = useMemo(() => {
@@ -84,6 +90,51 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
         window.print();
     };
 
+    const handleExportToZip = async () => {
+        if (!story) return;
+        setIsZipping(true);
+
+        try {
+            if (typeof htmlToImage === 'undefined' || typeof JSZip === 'undefined') {
+                alert("Export libraries could not be loaded. Please check your internet connection and try again.");
+                setIsZipping(false);
+                return;
+            }
+
+            const zip = new JSZip();
+            const pageElements = document.querySelectorAll<HTMLElement>('.printable-page');
+            
+            for (let i = 0; i < pageElements.length; i++) {
+                const pageElement = pageElements[i];
+                const pageNumber = i + 1;
+                try {
+                    const pngDataUrl = await htmlToImage.toPng(pageElement, { pixelRatio: 2 });
+                    const base64Data = pngDataUrl.split(',')[1];
+                    zip.file(`page_${String(pageNumber).padStart(2, '0')}.png`, base64Data, { base64: true });
+                } catch (imageError) {
+                    console.error(`Failed to render page ${pageNumber}:`, imageError);
+                }
+            }
+            
+            const content = await zip.generateAsync({ type: 'blob' });
+            
+            const a = document.createElement('a');
+            const sanitizedTitle = story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            a.download = `${sanitizedTitle || 'cyoa_story'}_png_export.zip`;
+            a.href = URL.createObjectURL(content);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+
+        } catch (error) {
+            console.error("Failed to create zip file:", error);
+            alert("An error occurred while creating the zip file.");
+        } finally {
+            setIsZipping(false);
+        }
+    };
+
     return (
         <>
             <style>
@@ -119,15 +170,19 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
             </style>
             <div className="max-w-4xl mx-auto">
                 <div className="no-print bg-gray-800/50 p-4 rounded-lg shadow-lg border border-purple-500/30 mb-8 flex flex-wrap items-center justify-center gap-4">
-                    <button onClick={onReturnToGame} className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition"><ArrowLeftIcon/> Return to Game</button>
-                    <button onClick={handleShuffle} className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition"><RefreshIcon/> Shuffle Pages</button>
-                    <button onClick={handlePrint} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition"><BookIcon/> Print Book</button>
-                    <button onClick={onRestart} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition"><HomeIcon/> Start New Story</button>
+                    <button onClick={onReturnToGame} disabled={isZipping} className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition disabled:opacity-50"><ArrowLeftIcon/> Return to Game</button>
+                    <button onClick={handleShuffle} disabled={isZipping} className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition disabled:opacity-50"><RefreshIcon/> Shuffle Pages</button>
+                    <button onClick={handleExportToZip} disabled={isZipping} className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md transition disabled:opacity-50">
+                        {isZipping ? <LoadingSpinner/> : <ZipIcon/>}
+                        {isZipping ? 'Exporting...' : 'Export as PNG ZIP'}
+                    </button>
+                    <button onClick={handlePrint} disabled={isZipping} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition disabled:opacity-50"><BookIcon/> Print Book</button>
+                    <button onClick={onRestart} disabled={isZipping} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:opacity-50"><HomeIcon/> Start New Story</button>
                 </div>
 
                 <div id="print-area">
                     {pages.map((page, index) => (
-                        <div key={index} className="page bg-white text-gray-900 aspect-[8.5/11] max-w-2xl mx-auto mb-8 shadow-2xl p-8 md:p-12 border-2 border-gray-700 flex flex-col">
+                        <div key={index} className="page printable-page bg-white text-gray-900 aspect-[8.5/11] max-w-2xl mx-auto mb-8 shadow-2xl p-8 md:p-12 border-2 border-gray-700 flex flex-col">
                             {page.type === 'cover' && (
                                 <div className="flex flex-col items-center justify-center text-center h-full">
                                     <h1 className="text-5xl font-bold font-title mb-8">{page.title}</h1>
