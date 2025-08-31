@@ -68,11 +68,9 @@ export const CheckIcon: React.FC = () => (
 
 export const DownloadIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-    {/* FIX: Close path tag and add clipRule attribute to fix parsing error. */}
     <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
   </svg>
 );
-// FIX: Add missing Icon components
 export const WandIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -109,12 +107,8 @@ export const InfoIcon: React.FC = () => (
     </svg>
 );
 
-export const ZipIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 7h2a5 5 0 015 5v2a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v-2a5 5 0 015-5h2.5" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 15V9" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 9l-2 3 2 3" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9h.01" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15h.01" />
+export const PdfIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8.414A2 2 0 0017.414 7L13 2.586A2 2 0 0011.586 2H4zm5 8a1 1 0 011-1h2a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
     </svg>
 );
