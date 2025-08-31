@@ -133,6 +133,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
             reader.onload = (e) => {
                 try {
                     const text = e.target?.result as string;
+                    // The full story object, including AI predictions and rationales, is parsed.
                     const importedStory: Story = JSON.parse(text);
                     if (importedStory.title && importedStory.nodes && importedStory.startNodeId) {
                         onStartGame(importedStory);

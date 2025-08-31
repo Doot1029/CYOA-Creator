@@ -4,15 +4,15 @@ export enum GamePhase {
     EXPORT = 'export'
 }
 
-export type ChoicePrediction = 'good' | 'bad' | 'ending';
+export type ChoicePrediction = 'good' | 'bad' | 'ending' | 'none';
 
 export interface Choice {
     id: string;
     text: string;
     nextNodeId: string | null;
-    isChosen?: boolean;
-    prediction?: ChoicePrediction;
-    predictionRationale?: string;
+    isChosen: boolean;
+    prediction: ChoicePrediction;
+    predictionRationale: string;
 }
 
 export interface StoryNode {

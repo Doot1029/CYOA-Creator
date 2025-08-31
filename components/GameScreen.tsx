@@ -2,14 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { generateImage } from '../services/geminiService';
-import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon } from './Icon';
+import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon } from './Icon';
 
 interface GameScreenProps {
     story: Story;
     setStory: React.Dispatch<React.SetStateAction<Story | null>>;
     currentNodeId: string;
     pageMap: Map<string, number>;
-    onNavigate: (choice: Choice, fromNodeId: string) => Promise<void>;
+    onNavigate: (choice: Choice, fromNodeId: string) => void;
     onChoiceJump: (choice: Choice, fromNodeId: string) => void;
     onJump: (nodeId: string) => void;
     onExport: () => void;
@@ -18,11 +18,21 @@ interface GameScreenProps {
     onShowMap: () => void;
     showPredictions: boolean;
     onTogglePredictions: () => void;
+    onRegenerateNode: (choice: Choice, fromNodeId: string) => void;
+    onRegenerateChoices: (nodeId: string) => void;
+    onRequestDeleteNode: (nodeId: string) => void;
     loading: boolean;
     isGeneratingEnding: boolean;
 }
 
-const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId, pageMap, onNavigate, onJump, onChoiceJump, onExport, onGenerateEnding, onMarkAsEnding, onShowMap, showPredictions, onTogglePredictions, loading, isGeneratingEnding }) => {
+const GameScreen: React.FC<GameScreenProps> = ({ 
+    story, setStory, currentNodeId, pageMap, 
+    onNavigate, onJump, onChoiceJump, onExport, 
+    onGenerateEnding, onMarkAsEnding, onShowMap, 
+    showPredictions, onTogglePredictions, 
+    onRegenerateNode, onRegenerateChoices, onRequestDeleteNode,
+    loading, isGeneratingEnding 
+}) => {
     const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
     const [cgLoading, setCgLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -121,6 +131,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId,
                 id: `choice_manual_${Date.now()}`,
                 text: newChoiceText,
                 nextNodeId: null,
+                isChosen: false,
+                prediction: 'none',
+                predictionRationale: 'This choice was added manually.'
             };
             setStory(prev => {
                 if (!prev) return null;
@@ -163,6 +176,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId,
     const handleExportStoryData = () => {
         if (!story) return;
         try {
+            // The full story object, including AI predictions and rationales, is serialized.
             const storyJson = JSON.stringify(story, null, 2);
             const blob = new Blob([storyJson], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -188,6 +202,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId,
                 return <ThumbsDownIcon />;
             case 'ending':
                 return <FlagIcon />;
+            case 'none':
             default:
                 return null;
         }
@@ -251,14 +266,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId,
                                 <button
                                     onClick={() => handleChoiceClick(choice)}
                                     disabled={loading || isEnding}
-                                    className={`w-full text-left p-3 rounded-md transition flex items-center justify-between ${
+                                    className={`flex-grow text-left p-3 rounded-md transition flex items-center justify-between ${
                                         choice.isChosen
                                             ? 'bg-purple-900/70 text-gray-400'
                                             : 'bg-gray-700 hover:bg-purple-800/50'
                                     } disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        {showPredictions && choice.prediction && (
+                                        {showPredictions && choice.prediction !== 'none' && (
                                             <div className="flex items-center gap-1.5">
                                                 <span className={`flex-shrink-0 ${
                                                     choice.prediction === 'good' ? 'text-green-400' :
@@ -280,7 +295,17 @@ const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId,
                                     </div>
                                     {choice.isChosen && <CheckIcon />}
                                 </button>
-                                 <button onClick={() => handleRemoveChoice(choice.id)} className="opacity-0 group-hover:opacity-100 transition text-red-400 hover:text-red-300 p-1"><TrashIcon /></button>
+                                {choice.nextNodeId && (
+                                    <button 
+                                        onClick={() => onRegenerateNode(choice, currentNodeId)} 
+                                        disabled={loading}
+                                        className="opacity-0 group-hover:opacity-100 transition text-blue-400 hover:text-blue-300 p-1 disabled:opacity-50"
+                                        title="Regenerate outcome"
+                                    >
+                                        <RefreshIcon />
+                                    </button>
+                                )}
+                                <button onClick={() => handleRemoveChoice(choice.id)} className="opacity-0 group-hover:opacity-100 transition text-red-400 hover:text-red-300 p-1"><TrashIcon /></button>
                             </div>
                         ))}
                         {loading && <div className="flex justify-center p-4"><LoadingSpinner /></div>}
@@ -303,6 +328,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ story, setStory, currentNodeId,
                     )}
                     <button onClick={handleAddChoice} disabled={loading || isGeneratingEnding} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-blue-800 disabled:cursor-not-allowed">
                        <PlusIcon /> Add a Choice
+                    </button>
+                    <button onClick={() => onRegenerateChoices(currentNodeId)} disabled={loading || isGeneratingEnding} className="w-full flex items-center justify-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-pink-800 disabled:cursor-not-allowed">
+                        <WandIcon /> Regenerate Choices
+                    </button>
+                    <button onClick={() => onRequestDeleteNode(currentNodeId)} disabled={loading || isGeneratingEnding || currentNodeId === story.startNodeId} className="w-full flex items-center justify-center gap-2 bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-900 disabled:opacity-50">
+                        <TrashIcon /> Delete This Page
                     </button>
                      <button onClick={onShowMap} className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition">
                         <MapIcon /> Story Map

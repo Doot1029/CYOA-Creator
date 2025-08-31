@@ -128,7 +128,14 @@ export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'sta
 
     return {
         dialogue: result.dialogue,
-        choices: result.choices.map(c => ({ id: `choice_${Date.now()}_${Math.random()}`, text: c.text, nextNodeId: null, prediction: c.prediction, predictionRationale: c.predictionRationale }))
+        choices: result.choices.map(c => ({ 
+            id: `choice_${Date.now()}_${Math.random()}`, 
+            text: c.text, 
+            nextNodeId: null, 
+            isChosen: false,
+            prediction: c.prediction || 'none', 
+            predictionRationale: c.predictionRationale || 'No rationale provided by AI.' 
+        }))
     };
 };
 
@@ -189,7 +196,66 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
 
     return {
         dialogue: result.dialogue,
-        choices: result.choices.map(c => ({ id: `choice_${Date.now()}_${Math.random()}`, text: c.text, nextNodeId: null, prediction: c.prediction, predictionRationale: c.predictionRationale }))
+        choices: result.choices.map(c => ({ 
+            id: `choice_${Date.now()}_${Math.random()}`, 
+            text: c.text, 
+            nextNodeId: null, 
+            isChosen: false,
+            prediction: c.prediction || 'none', 
+            predictionRationale: c.predictionRationale || 'No rationale provided by AI.' 
+        }))
+    };
+};
+
+export const regenerateChoices = async (story: Story, nodeId: string): Promise<{ choices: Omit<Choice, 'id' | 'nextNodeId' | 'isChosen'>[] }> => {
+    const gemini = getAi();
+    const node = story.nodes[nodeId];
+
+    const prompt = `
+        You are an assistant for a choose-your-own-adventure game creator.
+        The overall story prompt is: "${story.prompt}"
+        The current scene's text is: "${node.dialogue}"
+
+        The author is unhappy with the current choices and wants a new set.
+        
+        Instructions:
+        1. Generate exactly 3 new, creative, and distinct choices based on the scene's text.
+        2. Do NOT repeat any of the previous choices.
+        3. For each new choice, provide a 'prediction' of the outcome ('good', 'bad', or 'ending').
+        4. For each prediction, provide a short 'predictionRationale'.
+    `;
+
+    const response = await gemini.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    choices: {
+                        type: Type.ARRAY,
+                        description: "The new choices for the player.",
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                text: { type: Type.STRING, description: "The text for a new choice." },
+                                prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'ending'." },
+                                predictionRationale: { type: Type.STRING, description: "A brief justification for the prediction." }
+                            }
+                        }
+                    }
+                }
+            },
+            thinkingConfig: { thinkingBudget: 0 },
+        }
+    });
+
+    const result = safelyParseJSON<{choices: {text: string, prediction: ChoicePrediction, predictionRationale: string}[]}>(response.text);
+    if (!result || !result.choices) throw new Error("Failed to regenerate choices.");
+
+    return {
+        choices: result.choices,
     };
 };
 
@@ -249,7 +315,14 @@ export const generateStoryNodeForEnding = async (story: Story, fromNodeId: strin
 
     return {
         dialogue: result.dialogue,
-        choices: result.choices.map(c => ({ id: `choice_${Date.now()}_${Math.random()}`, text: c.text, nextNodeId: null, prediction: c.prediction, predictionRationale: c.predictionRationale }))
+        choices: result.choices.map(c => ({ 
+            id: `choice_${Date.now()}_${Math.random()}`, 
+            text: c.text, 
+            nextNodeId: null, 
+            isChosen: false,
+            prediction: c.prediction || 'none', 
+            predictionRationale: c.predictionRationale || 'No rationale provided by AI.' 
+        }))
     };
 };
 

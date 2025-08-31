@@ -6,7 +6,7 @@ import GameScreen from './components/GameScreen';
 import ExportScreen from './components/ExportScreen';
 import Modal from './components/Modal';
 import StoryMapView from './components/StoryMapView';
-import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode } from './services/geminiService';
+import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode, regenerateChoices } from './services/geminiService';
 import { generatePageMap } from './utils/storyUtils';
 
 interface ModalConfig {
@@ -185,6 +185,131 @@ const App: React.FC = () => {
         setCurrentNodeId(null);
         setGamePhase(GamePhase.SETUP);
     };
+    
+    const handleRegenerateNode = async (choice: Choice, fromNodeId: string) => {
+        if (!story || !choice.nextNodeId) return;
+        setLoading(true);
+        try {
+            const regeneratedNodeData = await generateStoryNode(story, fromNodeId, choice);
+            const targetNodeId = choice.nextNodeId;
+
+            setStory(prevStory => {
+                if (!prevStory) return null;
+                const updatedNodes = { ...prevStory.nodes };
+                const oldNode = updatedNodes[targetNodeId];
+                updatedNodes[targetNodeId] = { 
+                    ...oldNode,
+                    ...regeneratedNodeData, 
+                    id: targetNodeId 
+                };
+                return { ...prevStory, nodes: updatedNodes };
+            });
+            setCurrentNodeId(targetNodeId); 
+        } catch (error) {
+            console.error("Failed to regenerate story node:", error);
+            alert(`There was an error regenerating the story: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRegenerateChoices = async (nodeId: string) => {
+        if (!story) return;
+        setLoading(true);
+        try {
+            const { choices: newChoicesData } = await regenerateChoices(story, nodeId);
+
+            setStory(prevStory => {
+                if (!prevStory) return null;
+                const updatedNodes = { ...prevStory.nodes };
+                const updatedNode = { ...updatedNodes[nodeId] };
+                
+                updatedNode.choices = newChoicesData.map(c => ({
+                    id: `choice_${Date.now()}_${Math.random()}`,
+                    text: c.text,
+                    prediction: c.prediction || 'none',
+                    predictionRationale: c.predictionRationale || 'No rationale provided by AI.',
+                    nextNodeId: null,
+                    isChosen: false
+                }));
+                
+                updatedNodes[nodeId] = updatedNode;
+                return { ...prevStory, nodes: updatedNodes };
+            });
+        } catch (error) {
+            console.error("Failed to regenerate choices:", error);
+            alert(`An error occurred while regenerating choices: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteNode = (nodeId: string) => {
+        if (!story || nodeId === story.startNodeId) return;
+
+        const nodesToDelete = new Set<string>([nodeId]);
+        const queue = [nodeId];
+        const visited = new Set<string>([nodeId]);
+
+        while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            const currentNode = story.nodes[currentId];
+            if (currentNode) {
+                for (const choice of currentNode.choices) {
+                    if (choice.nextNodeId && !visited.has(choice.nextNodeId) && story.nodes[choice.nextNodeId]) {
+                        visited.add(choice.nextNodeId);
+                        nodesToDelete.add(choice.nextNodeId);
+                        queue.push(choice.nextNodeId);
+                    }
+                }
+            }
+        }
+
+        setStory(prevStory => {
+            if (!prevStory) return null;
+
+            const remainingNodeIds = Object.keys(prevStory.nodes).filter(id => !nodesToDelete.has(id));
+            const updatedNodes: Record<string, StoryNode> = {};
+
+            for (const id of remainingNodeIds) {
+                const node = { ...prevStory.nodes[id] };
+                node.choices = node.choices.map(choice => {
+                    if (choice.nextNodeId && nodesToDelete.has(choice.nextNodeId)) {
+                        return { ...choice, nextNodeId: null, isChosen: false };
+                    }
+                    return choice;
+                });
+                updatedNodes[id] = node;
+            }
+            
+            const updatedEndNodeIds = prevStory.endNodeIds.filter(id => !nodesToDelete.has(id));
+
+            return {
+                ...prevStory,
+                nodes: updatedNodes,
+                endNodeIds: updatedEndNodeIds
+            };
+        });
+
+        setCurrentNodeId(story.startNodeId);
+        alert(`Deleted page and ${nodesToDelete.size - 1} connected sub-pages.`);
+    };
+
+    const handleRequestDeleteNode = (nodeId: string) => {
+        if (!story || nodeId === story.startNodeId) {
+            alert("You cannot delete the starting page.");
+            return;
+        }
+        setModalConfig({
+            type: 'confirm',
+            title: 'Delete Page and Descendants',
+            message: 'Are you sure you want to delete this page and all pages that follow from it? This action cannot be undone.',
+            onConfirm: () => {
+                setModalConfig(null);
+                handleDeleteNode(nodeId);
+            },
+        });
+    };
 
     const renderContent = () => {
         switch (gamePhase) {
@@ -209,6 +334,9 @@ const App: React.FC = () => {
                                 onShowMap={() => setIsMapViewVisible(true)}
                                 showPredictions={showPredictions}
                                 onTogglePredictions={() => setShowPredictions(p => !p)}
+                                onRegenerateNode={handleRegenerateNode}
+                                onRegenerateChoices={handleRegenerateChoices}
+                                onRequestDeleteNode={handleRequestDeleteNode}
                                 loading={loading}
                                 isGeneratingEnding={isGeneratingEnding}
                             />
