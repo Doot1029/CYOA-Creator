@@ -12,13 +12,12 @@ const getAi = (): GoogleGenAI => {
         return ai;
     }
     
-    // The browser doesn't have direct access to process.env unless a build tool injects it.
-    // This code attempts to access it, and if it fails, it provides a clear error message.
-    // In some environments like AI Studio, this variable might be populated.
-    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+    // FIX: Use process.env.API_KEY as per the coding guidelines.
+    const apiKey = process.env.API_KEY;
 
     if (!apiKey) {
-        throw new Error("Gemini API key not found. Please ensure the API_KEY environment variable is set in your hosting provider's settings (e.g., Netlify) and that your site has been redeployed.");
+        // This error will be caught by the calling function and displayed to the user.
+        throw new Error("Gemini API key not found. Please ensure the API_KEY environment variable is set in your hosting provider's settings.");
     }
 
     ai = new GoogleGenAI({ apiKey });
