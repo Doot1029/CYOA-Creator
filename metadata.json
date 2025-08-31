@@ -1,0 +1,5 @@
+{
+  "name": "CYOA Creator",
+  "description": "Create, play, and export your own choose-your-own-adventure stories. Generate story and art with AI, then print your adventure as a book.",
+  "requestFramePermissions": []
+}
