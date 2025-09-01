@@ -370,3 +370,32 @@ export const generateFinalEndingNode = async (story: Story, fromNodeId: string, 
 
     return { dialogue: result.dialogue };
 };
+
+export const editStoryNodeDialogue = async (originalDialogue: string, userPrompt: string): Promise<{ newDialogue: string }> => {
+    const gemini = getAi();
+    const prompt = `
+        You are an expert story editor. A user wants to revise a piece of dialogue from their choose-your-own-adventure story.
+        
+        Original Dialogue:
+        ---
+        ${originalDialogue}
+        ---
+
+        User's instruction for the edit: "${userPrompt}"
+
+        Instructions:
+        1. Rewrite the "Original Dialogue" according to the user's instruction.
+        2. Keep the tone and style consistent with the original text unless the instruction says otherwise.
+        3. Only output the revised dialogue text. Do not add any extra commentary, introductions, or quotation marks around the text.
+    `;
+
+    const response = await gemini.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+
+    const newDialogue = response.text.trim();
+    if (!newDialogue) throw new Error("AI failed to generate an edit.");
+
+    return { newDialogue };
+};

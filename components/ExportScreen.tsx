@@ -29,6 +29,20 @@ type Page =
         isLastChunk: boolean;
       };
 
+// FIX: Define a type for layout calculation to avoid issues with `Omit` on a discriminated union.
+// This helper type explicitly defines the shape of page objects before the dialogue chunk is added,
+// which helps TypeScript correctly identify it as a discriminated union.
+type LayoutPage =
+    | { type: 'cover'; title: string; imageUrl: string; }
+    | { type: 'back_cover'; prompt: string; }
+    | {
+        type: 'node';
+        node: StoryNode;
+        originalId: string;
+        isFirstChunk: boolean;
+        isLastChunk: boolean;
+      };
+
 const shuffleArray = <T,>(array: T[]): T[] => {
     const newArray = [...array];
     for (let i = newArray.length - 1; i > 0; i--) {
@@ -38,44 +52,85 @@ const shuffleArray = <T,>(array: T[]): T[] => {
     return newArray;
 };
 
+const MAX_WORDS_ILLUSTRATED = 110;
+const MAX_WORDS_NO_ILLUSTRATION = 250;
+
+const splitTextIntoChunksByWordCount = (text: string, wordLimit: number): string[] => {
+    const words = text.split(' ');
+    if (words.length <= wordLimit) {
+        return [text];
+    }
+
+    const chunks: string[] = [];
+    let currentChunkWords: string[] = [];
+
+    for (const word of words) {
+        currentChunkWords.push(word);
+        if (currentChunkWords.length >= wordLimit) {
+            chunks.push(currentChunkWords.join(' '));
+            currentChunkWords = [];
+        }
+    }
+
+    if (currentChunkWords.length > 0) {
+        chunks.push(currentChunkWords.join(' '));
+    }
+    return chunks;
+};
+
+
 const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRestart }) => {
     const [pages, setPages] = useState<Page[]>([]);
     const [isExporting, setIsExporting] = useState(false);
     
-    // Create a stable, logical mapping of node IDs to page numbers
     const logicalPageMap = useMemo(() => {
         return generatePageMap(story.nodes, story.startNodeId);
     }, [story.nodes, story.startNodeId]);
     
-    useEffect(() => {
-        const MAX_CHARS_PER_PAGE = 1100; // Heuristic character limit per page.
-
-        const splitTextIntoChunks = (text: string): string[] => {
-            if (text.length <= MAX_CHARS_PER_PAGE) {
-                return [text];
-            }
-            const chunks: string[] = [];
-            let remainingText = text;
-            while (remainingText.length > 0) {
-                if (remainingText.length <= MAX_CHARS_PER_PAGE) {
-                    chunks.push(remainingText);
-                    break;
-                }
-                // Find the last space to avoid cutting words
-                let splitPoint = remainingText.lastIndexOf(' ', MAX_CHARS_PER_PAGE);
-                if (splitPoint === -1 || splitPoint < MAX_CHARS_PER_PAGE * 0.8) { // If no space or space is too early, hard cut
-                    splitPoint = MAX_CHARS_PER_PAGE;
-                }
-                chunks.push(remainingText.substring(0, splitPoint));
-                remainingText = remainingText.substring(splitPoint).trim();
-            }
-            return chunks;
-        };
+    const physicalPageMap = useMemo(() => {
+        const map = new Map<string, number>();
+        let physicalPageCounter = 1;
+        const tempPages: LayoutPage[] = [];
         
+        // First pass: layout pages to get indices
+        tempPages.push({ type: 'cover', title: story.title, imageUrl: story.coverImageUrl });
+        tempPages.push({ type: 'back_cover', prompt: story.prompt });
+        
+        const sortedNodeEntries = Array.from(logicalPageMap.entries())
+            .sort(([, pageNumA], [, pageNumB]) => pageNumA - pageNumB);
+
+        for (const [nodeId] of sortedNodeEntries) {
+            const node = story.nodes[nodeId];
+            if (node) {
+                const wordLimit = node.illustrationUrl ? MAX_WORDS_ILLUSTRATED : MAX_WORDS_NO_ILLUSTRATION;
+                const dialogueChunks = splitTextIntoChunksByWordCount(node.dialogue, wordLimit);
+                dialogueChunks.forEach((chunk, index) => {
+                    tempPages.push({
+                        type: 'node',
+                        node: node,
+                        originalId: nodeId,
+                        isFirstChunk: index === 0,
+                        isLastChunk: index === dialogueChunks.length - 1,
+                    });
+                });
+            }
+        }
+        
+        tempPages.forEach((page, index) => {
+             if (page.type === 'node' && page.isFirstChunk) {
+                map.set(page.originalId, index + 1);
+            }
+        });
+        
+        return map;
+    }, [story, logicalPageMap]);
+
+
+    useEffect(() => {
         const coverPage: Page = { type: 'cover', title: story.title, imageUrl: story.coverImageUrl };
         const backCoverPage: Page = { type: 'back_cover', prompt: story.prompt };
 
-        const tempPages: Page[] = [coverPage, backCoverPage];
+        const nodePages: Page[] = [];
 
         const sortedNodeEntries = Array.from(logicalPageMap.entries())
             .sort(([, pageNumA], [, pageNumB]) => pageNumA - pageNumB);
@@ -83,9 +138,11 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
         for (const [nodeId] of sortedNodeEntries) {
             const node = story.nodes[nodeId];
             if (node) {
-                const dialogueChunks = splitTextIntoChunks(node.dialogue);
+                const wordLimit = node.illustrationUrl ? MAX_WORDS_ILLUSTRATED : MAX_WORDS_NO_ILLUSTRATION;
+                const dialogueChunks = splitTextIntoChunksByWordCount(node.dialogue, wordLimit);
+                
                 dialogueChunks.forEach((chunk, index) => {
-                    tempPages.push({
+                    nodePages.push({
                         type: 'node',
                         node: node,
                         originalId: nodeId,
@@ -97,15 +154,16 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
             }
         }
 
-        // Add continuation messages after all pages are laid out
-        const finalPagesWithContinuations = tempPages.map((page, index) => {
+        const finalPagesWithContinuations = [coverPage, backCoverPage, ...nodePages].map((page, index, arr) => {
             if (page.type === 'node') {
                 let newDialogueChunk = page.dialogueChunk;
                 if (!page.isLastChunk) {
-                    newDialogueChunk += `\n\n...(Continued on page ${index + 2})`;
+                    const nextPageNumber = index + 2;
+                    newDialogueChunk += `\n\n...(Continued on page ${nextPageNumber})`;
                 }
                 if (!page.isFirstChunk) {
-                    newDialogueChunk = `(Continued from page ${index})...\n\n` + newDialogueChunk;
+                    const prevPageNumber = index;
+                    newDialogueChunk = `(Continued from page ${prevPageNumber})...\n\n` + newDialogueChunk;
                 }
                 return { ...page, dialogueChunk: newDialogueChunk };
             }
@@ -115,25 +173,15 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
         setPages(finalPagesWithContinuations);
     }, [story, logicalPageMap]);
     
-    const physicalPageMap = useMemo(() => {
-        const map = new Map<string, number>();
-        pages.forEach((page, index) => {
-            if (page.type === 'node' && page.isFirstChunk) {
-                map.set(page.originalId, index + 1);
-            }
-        });
-        return map;
-    }, [pages]);
-
     const handleShuffle = () => {
         if (pages.length <= 3) return;
 
         const coverPage = pages[0];
         const backCoverPage = pages[1];
+        const contentPages = pages.slice(2);
 
-        // Group all node pages by their original ID to keep them together
         const pageGroups = new Map<string, Page[]>();
-        pages.slice(2).forEach(p => {
+        contentPages.forEach(p => {
             if (p.type === 'node') {
                 const group = pageGroups.get(p.originalId) || [];
                 group.push(p);
@@ -142,15 +190,12 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
         });
 
         const startPageGroup = pageGroups.get(story.startNodeId);
-        if (!startPageGroup) return; // Safety check
+        if (!startPageGroup) return; 
 
-        // Separate the start page's group from the others
         pageGroups.delete(story.startNodeId);
-
         const otherGroups = Array.from(pageGroups.values());
         const shuffledGroups = shuffleArray(otherGroups);
 
-        // Flatten the shuffled groups back into a single list of pages
         const shuffledMiddlePages = shuffledGroups.flat();
 
         setPages([coverPage, backCoverPage, ...startPageGroup, ...shuffledMiddlePages]);
@@ -255,9 +300,9 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
                                 )}
                                 {page.type === 'node' && (
                                     <div className="flex-grow flex flex-col overflow-hidden">
-                                        {page.node.cgImageUrl && page.isFirstChunk && (
+                                        {page.node.illustrationUrl && page.isFirstChunk && (
                                             <div className="mb-4 flex-shrink-0">
-                                                <img src={page.node.cgImageUrl} alt="Scene CG" className="w-full h-auto object-cover rounded shadow-md border-2 border-gray-800" />
+                                                <img src={page.node.illustrationUrl} alt="Scene Illustration" className="w-full h-auto object-cover rounded shadow-md border-2 border-gray-800" />
                                             </div>
                                         )}
                                         <div className="space-y-4 overflow-hidden flex-grow">

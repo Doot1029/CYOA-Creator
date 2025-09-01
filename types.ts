@@ -18,7 +18,7 @@ export interface Choice {
 export interface StoryNode {
     id:string;
     dialogue: string;
-    cgImageUrl?: string; // base64 string
+    illustrationUrl?: string; // base64 string
     choices: Choice[];
 }
 
