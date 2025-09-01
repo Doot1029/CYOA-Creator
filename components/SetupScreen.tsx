@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Story } from '../types';
-import { generateStoryPrompt, generateImage, generateInitialStoryNode, generateTitle } from '../services/geminiService';
+import { generateStoryPrompt, generateImage, generateInitialStoryNode, generateTitle, generateCoverArtPromptKeywords } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
 import { UploadIcon, CopyIcon } from './Icon';
 
@@ -8,11 +8,15 @@ interface SetupScreenProps {
     onStartGame: (story: Story) => void;
 }
 
+const ART_STYLES = ['Digital Painting', 'Anime', 'Comic Book', 'Watercolor', 'Pixel Art', 'Photorealistic', 'Fantasy Art', 'Sci-Fi Concept Art', 'Steampunk'];
+
 const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
     const [title, setTitle] = useState('');
     const [prompt, setPrompt] = useState('');
     const [coverImageUrl, setCoverImageUrl] = useState('');
+    const [artStyle, setArtStyle] = useState(ART_STYLES[0]);
     const [loading, setLoading] = useState<string | null>(null);
+    const [isCopyingPrompt, setIsCopyingPrompt] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
 
     const handleFile = (file: File | null) => {
@@ -116,8 +120,8 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         }
         setLoading('cover');
         try {
-            const coverPrompt = `A book cover for a story titled "${title}" about: ${prompt}. Style: digital painting, fantasy, vibrant colors.`;
-            const url = await generateImage(coverPrompt, '3:4');
+            const coverPromptKeywords = await generateCoverArtPromptKeywords(title, prompt, artStyle);
+            const url = await generateImage(coverPromptKeywords, '3:4');
             setCoverImageUrl(url);
         } catch (error) {
             console.error(error);
@@ -134,18 +138,22 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         }
     };
 
-    const handleCopyCoverPrompt = () => {
+    const handleCopyCoverPrompt = async () => {
         if (!title || !prompt) {
             alert("Please provide a title and prompt first.");
             return;
         }
-        const coverPrompt = `A book cover for a story titled "${title}" about: ${prompt}. Style: digital painting, fantasy, vibrant colors.`;
-        navigator.clipboard.writeText(coverPrompt).then(() => {
+        setIsCopyingPrompt(true);
+        try {
+            const coverPromptKeywords = await generateCoverArtPromptKeywords(title, prompt, artStyle);
+            await navigator.clipboard.writeText(coverPromptKeywords);
             alert("Cover prompt copied to clipboard!");
-        }).catch(err => {
+        } catch (err) {
             console.error("Failed to copy prompt:", err);
             alert("Failed to copy prompt.");
-        });
+        } finally {
+            setIsCopyingPrompt(false);
+        }
     };
 
     const handleStart = async () => {
@@ -155,7 +163,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         }
         setLoading('start');
         try {
-            const storyData = { title, prompt };
+            const storyData = { title, prompt, artStyle };
             const initialNode = await generateInitialStoryNode(storyData);
             
             const startNodeId = `node_start_${Date.now()}`;
@@ -258,6 +266,17 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                         )}
                     </div>
                     <div className="flex-grow space-y-2 w-full">
+                         <div className="flex items-center gap-2">
+                            <label htmlFor="art-style" className="text-sm font-bold text-gray-300 whitespace-nowrap">Art Style:</label>
+                            <select
+                                id="art-style"
+                                value={artStyle}
+                                onChange={e => setArtStyle(e.target.value)}
+                                className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none transition text-sm"
+                            >
+                                {ART_STYLES.map(style => <option key={style} value={style}>{style}</option>)}
+                            </select>
+                        </div>
                         <button onClick={handleGenerateCover} disabled={!!loading || !prompt || !title} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-purple-800 disabled:cursor-not-allowed flex items-center justify-center">
                             {loading === 'cover' ? <LoadingSpinner /> : 'Generate Cover'}
                         </button>
@@ -265,8 +284,9 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                             <UploadIcon /> Upload Cover
                             <input type="file" accept="image/*" className="hidden" onChange={handleUploadCover} disabled={!!loading} />
                         </label>
-                        <button onClick={handleCopyCoverPrompt} disabled={!prompt || !title} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-800 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                            <CopyIcon /> Copy Prompt
+                        <button onClick={handleCopyCoverPrompt} disabled={!prompt || !title || isCopyingPrompt} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-800 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                            {isCopyingPrompt ? <LoadingSpinner /> : <CopyIcon />}
+                            {isCopyingPrompt ? 'Generating...' : 'Copy Prompt'}
                         </button>
                         <p className="text-xs text-gray-400 text-center pt-1">You can also drag & drop or paste an image.</p>
                     </div>

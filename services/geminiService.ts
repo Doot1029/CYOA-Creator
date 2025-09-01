@@ -61,10 +61,52 @@ export const generateTitle = async (storyPrompt: string): Promise<string> => {
     const gemini = getAi();
      const response: GenerateContentResponse = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Generate a short, catchy, and creative title for a visual novel with the following prompt: "${storyPrompt}"`,
+        contents: `Generate a single, short, creative title for a visual novel based on this prompt: "${storyPrompt}". Respond with ONLY the title text. Do not include quotation marks, labels, or any other descriptive text.`,
     });
     return response.text.trim().replace(/"/g, ''); // Remove quotes from the response
 }
+
+export const generateCoverArtPromptKeywords = async (title: string, storyPrompt: string, artStyle: string): Promise<string> => {
+    const gemini = getAi();
+    const prompt = `
+        You are an AI assistant for creating art prompts. Generate a concise, comma-separated list of keywords for a book cover based on the provided details.
+        The output should be a single line of text. Do not use descriptive sentences.
+        The keywords should include the main subject, setting, mood, and the specified art style.
+        
+        Details:
+        - Title: "${title}"
+        - Story Prompt: "${storyPrompt}"
+        - Art Style: "${artStyle}"
+
+        Example output: book cover, title: The Last Dragon, epic fantasy, a lone knight facing a giant red dragon, fiery mountain peak, dramatic lighting, digital painting
+    `;
+    const response = await gemini.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    return response.text.trim().replace(/\n/g, ''); // Ensure single line
+};
+
+export const generateIllustrationPromptKeywords = async (sceneDialogue: string, artStyle: string): Promise<string> => {
+    const gemini = getAi();
+    const prompt = `
+        You are an AI assistant for creating art prompts. Generate a concise, comma-separated list of keywords for a visual novel illustration based on the provided scene dialogue.
+        The output should be a single line of text. Do not use descriptive sentences.
+        The keywords should describe the key characters, actions, setting, mood, and the specified art style.
+        
+        Details:
+        - Scene Dialogue: "${sceneDialogue}"
+        - Art Style: "${artStyle}"
+
+        Example output: anime style, two characters arguing, medieval tavern, dimly lit, intense emotion, wooden table, mugs of ale
+    `;
+    const response = await gemini.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    return response.text.trim().replace(/\n/g, ''); // Ensure single line
+};
+
 
 export const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9' | '3:4'): Promise<string> => {
     const gemini = getAi();

@@ -26,6 +26,7 @@ export interface Story {
     title: string;
     coverImageUrl: string; // base64 string
     prompt: string;
+    artStyle: string;
     nodes: Record<string, StoryNode>;
     startNodeId: string;
     endNodeIds: string[];

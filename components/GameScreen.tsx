@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
-import { generateImage, editStoryNodeDialogue } from '../services/geminiService';
+import { generateImage, editStoryNodeDialogue, generateIllustrationPromptKeywords } from '../services/geminiService';
 import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon, ArrowLeftIcon, HomeIcon } from './Icon';
 
 interface GameScreenProps {
@@ -28,6 +28,8 @@ interface GameScreenProps {
 type AiEditStatus = 'idle' | 'loading' | 'hasSuggestion';
 type DiffStats = { added: number; removed: number };
 
+const ART_STYLES = ['Digital Painting', 'Anime', 'Comic Book', 'Watercolor', 'Pixel Art', 'Photorealistic', 'Fantasy Art', 'Sci-Fi Concept Art', 'Steampunk'];
+
 const GameScreen: React.FC<GameScreenProps> = ({ 
     story, setStory, currentNodeId, pageMap, 
     onNavigate, onJump, onChoiceJump, onExport, 
@@ -38,6 +40,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
 }) => {
     const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
     const [illustrationLoading, setIllustrationLoading] = useState(false);
+    const [isCopyingPrompt, setIsCopyingPrompt] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingDialogue, setEditingDialogue] = useState<string>('');
     const [infoTooltipId, setInfoTooltipId] = useState<string | null>(null);
@@ -189,10 +192,9 @@ const GameScreen: React.FC<GameScreenProps> = ({
     const handleGenerateIllustration = async () => {
         if (!currentNode) return;
         setIllustrationLoading(true);
-        const sceneText = currentNode.dialogue;
-        const illustrationPrompt = `A cinematic digital painting of the following scene: "${sceneText}". Style: detailed, atmospheric, visual novel illustration.`;
         try {
-            const imageUrl = await generateImage(illustrationPrompt, '16:9');
+            const illustrationPromptKeywords = await generateIllustrationPromptKeywords(currentNode.dialogue, story.artStyle);
+            const imageUrl = await generateImage(illustrationPromptKeywords, '16:9');
             setStory(prev => {
                 if (!prev) return null;
                 const newNodes = { ...prev.nodes };
@@ -223,15 +225,25 @@ const GameScreen: React.FC<GameScreenProps> = ({
         }
     };
 
-    const handleCopyIllustrationPrompt = () => {
+    const handleCopyIllustrationPrompt = async () => {
         if (!currentNode) return;
-        const sceneText = currentNode.dialogue;
-        const illustrationPrompt = `A cinematic digital painting of the following scene: "${sceneText}". Style: detailed, atmospheric, visual novel illustration.`;
-        navigator.clipboard.writeText(illustrationPrompt).then(() => {
+        setIsCopyingPrompt(true);
+        try {
+            const illustrationPromptKeywords = await generateIllustrationPromptKeywords(currentNode.dialogue, story.artStyle);
+            await navigator.clipboard.writeText(illustrationPromptKeywords);
             alert("Illustration prompt copied to clipboard!");
-        }).catch(err => {
+        } catch (err) {
             console.error('Failed to copy text: ', err);
             alert('Failed to copy prompt.');
+        } finally {
+            setIsCopyingPrompt(false);
+        }
+    };
+
+    const handleArtStyleChange = (newStyle: string) => {
+        setStory(prev => {
+            if (!prev) return null;
+            return { ...prev, artStyle: newStyle };
         });
     };
 
@@ -392,25 +404,39 @@ const GameScreen: React.FC<GameScreenProps> = ({
                             <p className="text-gray-400">No illustration for this scene.</p>
                         </div>
                     )}
-                    <div className="absolute bottom-2 right-2">
-                        <div className="flex items-center gap-2 flex-wrap justify-end">
-                            <button onClick={handleCopyIllustrationPrompt} className="bg-gray-600/80 hover:bg-gray-500/80 backdrop-blur-sm text-white font-bold p-2 rounded-md transition flex items-center" title="Copy Prompt">
-                                <CopyIcon className="h-4 w-4" />
-                            </button>
-                            {currentNode.illustrationUrl && (
-                                <button onClick={handleRemoveIllustration} className="bg-red-600/80 hover:bg-red-700/80 backdrop-blur-sm text-white font-bold p-2 rounded-md transition flex items-center" title="Remove Illustration">
-                                    <TrashIcon />
+                    <div className="absolute bottom-2 left-2 right-2">
+                        <div className="bg-gray-800/60 backdrop-blur-sm p-2 rounded-md space-y-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <div className="flex items-center gap-1.5 mr-auto">
+                                    <label htmlFor="art-style-scene" className="text-xs font-bold text-gray-300 whitespace-nowrap">Style:</label>
+                                    <select
+                                        id="art-style-scene"
+                                        value={story.artStyle}
+                                        onChange={e => handleArtStyleChange(e.target.value)}
+                                        className="w-full bg-gray-700 p-1 rounded-md border border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none transition text-xs"
+                                    >
+                                        {ART_STYLES.map(style => <option key={style} value={style}>{style}</option>)}
+                                    </select>
+                                </div>
+                                <button onClick={handleCopyIllustrationPrompt} disabled={isCopyingPrompt} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5 disabled:bg-gray-800">
+                                    {isCopyingPrompt ? <LoadingSpinner/> : <CopyIcon className="h-4 w-4" />}
+                                    {isCopyingPrompt ? "..." : "Copy"}
                                 </button>
-                            )}
-                            <label className="cursor-pointer bg-green-600/80 hover:bg-green-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5">
-                                <UploadIcon className="h-4 w-4" /> Upload
-                                <input type="file" accept="image/*" className="hidden" onChange={handleUploadIllustration} disabled={illustrationLoading} />
-                            </label>
-                            <button onClick={handleGenerateIllustration} disabled={illustrationLoading} className="bg-purple-600/80 hover:bg-purple-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition disabled:bg-purple-800/80 flex items-center gap-1.5">
-                                {illustrationLoading ? <LoadingSpinner /> : 'Generate'}
-                            </button>
+                                {currentNode.illustrationUrl && (
+                                    <button onClick={handleRemoveIllustration} className="bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded-md transition flex items-center" title="Remove Illustration">
+                                        <TrashIcon />
+                                    </button>
+                                )}
+                                <label className="cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5">
+                                    <UploadIcon className="h-4 w-4" /> Upload
+                                    <input type="file" accept="image/*" className="hidden" onChange={handleUploadIllustration} disabled={illustrationLoading} />
+                                </label>
+                                <button onClick={handleGenerateIllustration} disabled={illustrationLoading} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 text-sm rounded-md transition disabled:bg-purple-800 flex items-center gap-1.5">
+                                    {illustrationLoading ? <LoadingSpinner /> : 'Generate'}
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-300 text-right pr-1">You can also drag & drop or paste an image.</p>
                         </div>
-                        <p className="text-xs text-gray-300 text-right mt-1 pr-1">Drag & drop or paste an image to update.</p>
                     </div>
                 </div>
                 
