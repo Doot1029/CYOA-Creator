@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { generateImage, editStoryNodeDialogue } from '../services/geminiService';
-import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon, ArrowLeftIcon, HomeIcon, PasteIcon } from './Icon';
+import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon, ArrowLeftIcon, HomeIcon } from './Icon';
 
 interface GameScreenProps {
     story: Story;
@@ -42,6 +42,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
     const [editingDialogue, setEditingDialogue] = useState<string>('');
     const [infoTooltipId, setInfoTooltipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Content & AI');
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
 
     // AI Edit State
     const [aiEditPrompt, setAiEditPrompt] = useState('');
@@ -57,12 +58,38 @@ const GameScreen: React.FC<GameScreenProps> = ({
         if (node) {
             setEditingDialogue(node.dialogue);
         }
-        // Reset editing mode and AI state on page change
         setIsEditing(false);
         setAiEditStatus('idle');
         setAiSuggestions([]);
         setAiEditPrompt('');
     }, [currentNodeId, story]);
+
+    const handleIllustrationFile = (file: File | null) => {
+        if (file && file.type.startsWith('image/')) {
+            if (currentNode) {
+                setIllustrationLoading(true);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const imageUrl = reader.result as string;
+                    setStory(prev => {
+                        if (!prev) return null;
+                        const newNodes = { ...prev.nodes };
+                        newNodes[currentNodeId].illustrationUrl = imageUrl;
+                        return { ...prev, nodes: newNodes };
+                    });
+                    setIllustrationLoading(false);
+                };
+                reader.onerror = () => {
+                    console.error("Failed to read file");
+                    alert("Failed to read file.");
+                    setIllustrationLoading(false);
+                }
+                reader.readAsDataURL(file);
+            }
+        } else if (file) {
+            alert("Please use an image file (e.g., PNG, JPG).");
+        }
+    };
 
     useEffect(() => {
         const handlePaste = (event: ClipboardEvent) => {
@@ -76,26 +103,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
             for (let i = 0; i < items.length; i++) {
                 if (items[i].type.startsWith('image/')) {
                     const file = items[i].getAsFile();
-                    if (file && currentNode) {
-                        setIllustrationLoading(true);
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                            const imageUrl = reader.result as string;
-                            setStory(prev => {
-                                if (!prev) return null;
-                                const newNodes = { ...prev.nodes };
-                                newNodes[currentNodeId].illustrationUrl = imageUrl;
-                                return { ...prev, nodes: newNodes };
-                            });
-                            setIllustrationLoading(false);
-                        };
-                        reader.onerror = () => {
-                            console.error("Failed to read pasted file");
-                            alert("Failed to read pasted image.");
-                            setIllustrationLoading(false);
-                        }
-                        reader.readAsDataURL(file);
-                    }
+                    handleIllustrationFile(file);
                     event.preventDefault();
                     return;
                 }
@@ -108,6 +116,22 @@ const GameScreen: React.FC<GameScreenProps> = ({
         };
     }, [currentNodeId, setStory, currentNode]);
 
+    const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDraggingOver(true);
+    };
+    const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDraggingOver(false);
+    };
+    const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDraggingOver(false);
+        const file = event.dataTransfer.files?.[0];
+        if (file) {
+            handleIllustrationFile(file);
+        }
+    };
 
     const jumpOptions = useMemo(() => {
         return Array.from(pageMap.entries())
@@ -185,26 +209,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
 
     const handleUploadIllustration = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (file && currentNode) {
-            setIllustrationLoading(true);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const imageUrl = reader.result as string;
-                setStory(prev => {
-                    if (!prev) return null;
-                    const newNodes = { ...prev.nodes };
-                    newNodes[currentNodeId].illustrationUrl = imageUrl;
-                    return { ...prev, nodes: newNodes };
-                });
-                setIllustrationLoading(false);
-            };
-            reader.onerror = () => {
-                console.error("Failed to read file");
-                alert("Failed to read file.");
-                setIllustrationLoading(false);
-            }
-            reader.readAsDataURL(file);
-        }
+        handleIllustrationFile(file);
     };
     
     const handleRemoveIllustration = () => {
@@ -228,10 +233,6 @@ const GameScreen: React.FC<GameScreenProps> = ({
             console.error('Failed to copy text: ', err);
             alert('Failed to copy prompt.');
         });
-    };
-
-    const handlePasteIllustrationClick = () => {
-        alert("You can paste an image directly onto the page using Ctrl+V or Cmd+V to set it as the illustration.");
     };
 
     const handleAddChoice = () => {
@@ -373,7 +374,17 @@ const GameScreen: React.FC<GameScreenProps> = ({
     return (
         <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 bg-gray-800/50 p-6 rounded-lg shadow-lg border border-purple-500/30 flex flex-col">
-                <div className="relative mb-4">
+                <div 
+                    className="relative mb-4"
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    {isDraggingOver && (
+                        <div className="absolute inset-0 bg-black/50 border-4 border-dashed border-purple-400 rounded-md flex items-center justify-center z-10">
+                            <p className="text-white text-xl font-bold">Drop Image Here</p>
+                        </div>
+                    )}
                     {currentNode.illustrationUrl ? (
                         <img src={currentNode.illustrationUrl} alt="Scene Illustration" className="w-full h-auto object-cover rounded-md shadow-lg" />
                     ) : (
@@ -381,25 +392,25 @@ const GameScreen: React.FC<GameScreenProps> = ({
                             <p className="text-gray-400">No illustration for this scene.</p>
                         </div>
                     )}
-                    <div className="absolute bottom-2 right-2 flex items-center gap-2 flex-wrap justify-end">
-                        <button onClick={handleCopyIllustrationPrompt} className="bg-gray-600/80 hover:bg-gray-500/80 backdrop-blur-sm text-white font-bold p-2 rounded-md transition flex items-center" title="Copy Prompt">
-                            <CopyIcon className="h-4 w-4" />
-                        </button>
-                        {currentNode.illustrationUrl && (
-                             <button onClick={handleRemoveIllustration} className="bg-red-600/80 hover:bg-red-700/80 backdrop-blur-sm text-white font-bold p-2 rounded-md transition flex items-center" title="Remove Illustration">
-                                <TrashIcon />
+                    <div className="absolute bottom-2 right-2">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                            <button onClick={handleCopyIllustrationPrompt} className="bg-gray-600/80 hover:bg-gray-500/80 backdrop-blur-sm text-white font-bold p-2 rounded-md transition flex items-center" title="Copy Prompt">
+                                <CopyIcon className="h-4 w-4" />
                             </button>
-                        )}
-                        <button onClick={handlePasteIllustrationClick} className="bg-blue-600/80 hover:bg-blue-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5" title="Paste Image">
-                           <PasteIcon className="h-4 w-4" /> Paste
-                        </button>
-                        <label className="cursor-pointer bg-green-600/80 hover:bg-green-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5">
-                            <UploadIcon className="h-4 w-4" /> Upload
-                            <input type="file" accept="image/*" className="hidden" onChange={handleUploadIllustration} disabled={illustrationLoading} />
-                        </label>
-                        <button onClick={handleGenerateIllustration} disabled={illustrationLoading} className="bg-purple-600/80 hover:bg-purple-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition disabled:bg-purple-800/80 flex items-center gap-1.5">
-                            {illustrationLoading ? <LoadingSpinner /> : 'Generate'}
-                        </button>
+                            {currentNode.illustrationUrl && (
+                                <button onClick={handleRemoveIllustration} className="bg-red-600/80 hover:bg-red-700/80 backdrop-blur-sm text-white font-bold p-2 rounded-md transition flex items-center" title="Remove Illustration">
+                                    <TrashIcon />
+                                </button>
+                            )}
+                            <label className="cursor-pointer bg-green-600/80 hover:bg-green-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5">
+                                <UploadIcon className="h-4 w-4" /> Upload
+                                <input type="file" accept="image/*" className="hidden" onChange={handleUploadIllustration} disabled={illustrationLoading} />
+                            </label>
+                            <button onClick={handleGenerateIllustration} disabled={illustrationLoading} className="bg-purple-600/80 hover:bg-purple-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition disabled:bg-purple-800/80 flex items-center gap-1.5">
+                                {illustrationLoading ? <LoadingSpinner /> : 'Generate'}
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-300 text-right mt-1 pr-1">Drag & drop or paste an image to update.</p>
                     </div>
                 </div>
                 
