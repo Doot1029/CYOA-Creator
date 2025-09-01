@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { generateImage, editStoryNodeDialogue } from '../services/geminiService';
-import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon, ArrowLeftIcon, HomeIcon } from './Icon';
+import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon, ArrowLeftIcon, HomeIcon, PasteIcon } from './Icon';
 
 interface GameScreenProps {
     story: Story;
@@ -63,6 +63,51 @@ const GameScreen: React.FC<GameScreenProps> = ({
         setAiSuggestions([]);
         setAiEditPrompt('');
     }, [currentNodeId, story]);
+
+    useEffect(() => {
+        const handlePaste = (event: ClipboardEvent) => {
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+                return;
+            }
+
+            const items = event.clipboardData?.items;
+            if (!items) return;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile();
+                    if (file && currentNode) {
+                        setIllustrationLoading(true);
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const imageUrl = reader.result as string;
+                            setStory(prev => {
+                                if (!prev) return null;
+                                const newNodes = { ...prev.nodes };
+                                newNodes[currentNodeId].illustrationUrl = imageUrl;
+                                return { ...prev, nodes: newNodes };
+                            });
+                            setIllustrationLoading(false);
+                        };
+                        reader.onerror = () => {
+                            console.error("Failed to read pasted file");
+                            alert("Failed to read pasted image.");
+                            setIllustrationLoading(false);
+                        }
+                        reader.readAsDataURL(file);
+                    }
+                    event.preventDefault();
+                    return;
+                }
+            }
+        };
+
+        document.addEventListener('paste', handlePaste);
+        return () => {
+            document.removeEventListener('paste', handlePaste);
+        };
+    }, [currentNodeId, setStory, currentNode]);
+
 
     const jumpOptions = useMemo(() => {
         return Array.from(pageMap.entries())
@@ -183,6 +228,10 @@ const GameScreen: React.FC<GameScreenProps> = ({
             console.error('Failed to copy text: ', err);
             alert('Failed to copy prompt.');
         });
+    };
+
+    const handlePasteIllustrationClick = () => {
+        alert("You can paste an image directly onto the page using Ctrl+V or Cmd+V to set it as the illustration.");
     };
 
     const handleAddChoice = () => {
@@ -341,6 +390,9 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                 <TrashIcon />
                             </button>
                         )}
+                        <button onClick={handlePasteIllustrationClick} className="bg-blue-600/80 hover:bg-blue-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5" title="Paste Image">
+                           <PasteIcon className="h-4 w-4" /> Paste
+                        </button>
                         <label className="cursor-pointer bg-green-600/80 hover:bg-green-700/80 backdrop-blur-sm text-white font-bold py-1 px-3 text-sm rounded-md transition flex items-center gap-1.5">
                             <UploadIcon className="h-4 w-4" /> Upload
                             <input type="file" accept="image/*" className="hidden" onChange={handleUploadIllustration} disabled={illustrationLoading} />

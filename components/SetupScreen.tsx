@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Story } from '../types';
 import { generateStoryPrompt, generateImage, generateInitialStoryNode, generateTitle } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
-import { UploadIcon, CopyIcon } from './Icon';
+import { UploadIcon, CopyIcon, PasteIcon } from './Icon';
 
 interface SetupScreenProps {
     onStartGame: (story: Story) => void;
@@ -13,6 +13,47 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
     const [prompt, setPrompt] = useState('');
     const [coverImageUrl, setCoverImageUrl] = useState('');
     const [loading, setLoading] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handlePaste = (event: ClipboardEvent) => {
+            const items = event.clipboardData?.items;
+            if (!items) return;
+
+            // Check if any text input is focused to avoid overriding text paste
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+                return;
+            }
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile();
+                    if (file) {
+                        setLoading('cover');
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            setCoverImageUrl(reader.result as string);
+                            setLoading(null);
+                        };
+                        reader.onerror = () => {
+                            console.error("Failed to read pasted file");
+                            alert("Failed to read pasted image.");
+                            setLoading(null);
+                        }
+                        reader.readAsDataURL(file);
+                    }
+                    event.preventDefault();
+                    return;
+                }
+            }
+        };
+
+        document.addEventListener('paste', handlePaste);
+
+        return () => {
+            document.removeEventListener('paste', handlePaste);
+        };
+    }, []); // Empty dependency array, runs once
+
 
     const handleGeneratePrompt = async () => {
         setLoading('prompt');
@@ -92,6 +133,10 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
             console.error("Failed to copy prompt:", err);
             alert("Failed to copy prompt.");
         });
+    };
+
+    const handlePasteCoverClick = () => {
+        alert("You can paste an image directly onto the page using Ctrl+V or Cmd+V.");
     };
 
     const handleStart = async () => {
@@ -197,6 +242,9 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                     <div className="flex-grow space-y-2 w-full">
                         <button onClick={handleGenerateCover} disabled={!!loading || !prompt || !title} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-purple-800 disabled:cursor-not-allowed flex items-center justify-center">
                             {loading === 'cover' ? <LoadingSpinner /> : 'Generate Cover'}
+                        </button>
+                         <button onClick={handlePasteCoverClick} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-2">
+                            <PasteIcon /> Paste Cover
                         </button>
                         <label className="w-full cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-2">
                             <UploadIcon /> Upload Cover
