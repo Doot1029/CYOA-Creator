@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { useState, useCallback, useMemo } from 'react';
 import { GamePhase, Story, Choice, StoryNode, ChoicePrediction } from './types';
@@ -6,7 +7,7 @@ import SetupScreen from './components/SetupScreen';
 import GameScreen from './components/GameScreen';
 import ExportScreen from './components/ExportScreen';
 import Modal from './components/Modal';
-import { generateStoryNode, regenerateChoices } from './services/geminiService';
+import { generateStoryNode, regenerateChoices, generateInitialStoryNode } from './services/geminiService';
 import { generatePageMap, calculatePathScores, getParentMap } from './utils/storyUtils';
 
 interface ModalConfig {
@@ -24,9 +25,11 @@ const App: React.FC = () => {
     const [story, setStory] = useState<Story | null>(null);
     const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
     const [pathScores, setPathScores] = useState<PathScores>({ good: 0, bad: 0, mixed: 0 });
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState<string | null>(null);
     const [modalConfig, setModalConfig] = useState<ModalConfig | null>(null);
     const [showPredictions, setShowPredictions] = useState(false);
+    const [autoCompleteProgress, setAutoCompleteProgress] = useState<string | null>(null);
+
 
     const handleStartGame = (initialStory: Story) => {
         setStory(initialStory);
@@ -37,7 +40,8 @@ const App: React.FC = () => {
 
     const handleNavigate = useCallback(async (choice: Choice, fromNodeId: string) => {
         if (!story) return;
-        setLoading(true);
+        // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
+        setLoading('loading');
 
         const newScores = { ...pathScores };
         if (choice.prediction !== 'none') {
@@ -83,7 +87,8 @@ const App: React.FC = () => {
             console.error("Failed to generate next story node:", error);
             alert(`There was an error generating the next part of the story: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            setLoading(false);
+            // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
+            setLoading(null);
         }
     }, [story, pathScores]);
     
@@ -93,6 +98,89 @@ const App: React.FC = () => {
         setPathScores(newScores);
     }, []);
 
+    const handleAutoCompleteStory = async (storyData: Omit<Story, 'nodes' | 'startNodeId' | 'endNodeIds'>) => {
+        setLoading('auto-completing');
+        setAutoCompleteProgress("Generating initial page...");
+    
+        // This variable will be mutated during generation and set to state once.
+        let storyInProgress: Story | null = null;
+    
+        try {
+            const initialNodeData = await generateInitialStoryNode(storyData);
+            const startNodeId = `node_start_${Date.now()}`;
+            
+            storyInProgress = {
+                ...storyData,
+                startNodeId,
+                nodes: {
+                    [startNodeId]: { ...initialNodeData, id: startNodeId }
+                },
+                endNodeIds: []
+            };
+            
+            const queue: string[] = [startNodeId];
+            const visited = new Set<string>([startNodeId]);
+            let pagesGenerated = 1;
+    
+            while (queue.length > 0) {
+                const nodeId = queue.shift()!;
+                const parentNode = storyInProgress.nodes[nodeId];
+    
+                setAutoCompleteProgress(`Generated ${pagesGenerated} pages. Processing queue (${queue.length} remaining)...`);
+                // Allow the UI to update with the progress message
+                await new Promise(resolve => setTimeout(resolve, 50));
+    
+                for (let i = 0; i < parentNode.choices.length; i++) {
+                    const choice = parentNode.choices[i];
+                    if (choice.nextNodeId) continue;
+    
+                    const pathScores = calculatePathScores(storyInProgress, nodeId, getParentMap(storyInProgress));
+                    const newScores = { ...pathScores };
+                    if (choice.prediction !== 'none') {
+                        newScores[choice.prediction]++;
+                    }
+    
+                    const newNodeData = await generateStoryNode(storyInProgress, nodeId, choice, newScores);
+                    const newId = `node_${Date.now()}_${i}`;
+                    pagesGenerated++;
+    
+                    // Directly mutate the local story object
+                    storyInProgress.nodes[newId] = { ...newNodeData, id: newId };
+                    parentNode.choices[i] = { ...choice, nextNodeId: newId, isChosen: true };
+    
+                    const isEnding = newNodeData.choices.length === 0;
+                    if (isEnding && !storyInProgress.endNodeIds.includes(newId)) {
+                        storyInProgress.endNodeIds.push(newId);
+                    }
+    
+                    if (!isEnding && !visited.has(newId)) {
+                        queue.push(newId);
+                        visited.add(newId);
+                    }
+                }
+            }
+    
+            setStory(storyInProgress);
+            setCurrentNodeId(storyInProgress.startNodeId);
+            setPathScores({ good: 0, bad: 0, mixed: 0 });
+            setGamePhase(GamePhase.PLAY);
+    
+        } catch (error) {
+            console.error("Failed to auto-complete story:", error);
+            alert(`An error occurred during auto-completion: ${error instanceof Error ? error.message : String(error)}. The story has been partially generated and will now be loaded for editing.`);
+            // If an error occurs, save the partial progress.
+            if (storyInProgress) {
+                setStory(storyInProgress);
+                setCurrentNodeId(storyInProgress.startNodeId);
+                setPathScores({ good: 0, bad: 0, mixed: 0 });
+                setGamePhase(GamePhase.PLAY);
+            }
+        } finally {
+            setLoading(null);
+            setAutoCompleteProgress(null);
+        }
+    };
+    
     const handleRequestMarkAsEnding = (nodeId: string) => {
         setModalConfig({
             type: 'confirm',
@@ -146,7 +234,8 @@ const App: React.FC = () => {
     
     const handleRegenerateNode = async (choice: Choice, fromNodeId: string) => {
         if (!story || !choice.nextNodeId) return;
-        setLoading(true);
+        // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
+        setLoading('loading');
 
         // Recalculate scores up to the point *before* the node to be regenerated
         const parentMap = getParentMap(story);
@@ -188,13 +277,15 @@ const App: React.FC = () => {
             console.error("Failed to regenerate story node:", error);
             alert(`There was an error regenerating the story: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            setLoading(false);
+            // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
+            setLoading(null);
         }
     };
 
     const handleRegenerateChoices = async (nodeId: string) => {
         if (!story) return;
-        setLoading(true);
+        // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
+        setLoading('loading');
         try {
             const { choices: newChoicesData } = await regenerateChoices(story, nodeId);
 
@@ -219,7 +310,8 @@ const App: React.FC = () => {
             console.error("Failed to regenerate choices:", error);
             alert(`An error occurred while regenerating choices: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            setLoading(false);
+            // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
+            setLoading(null);
         }
     };
 
@@ -294,7 +386,12 @@ const App: React.FC = () => {
     const renderContent = () => {
         switch (gamePhase) {
             case GamePhase.SETUP:
-                return <SetupScreen onStartGame={handleStartGame} />;
+                return <SetupScreen 
+                    onStartGame={handleStartGame} 
+                    onAutoCompleteStory={handleAutoCompleteStory}
+                    loading={loading}
+                    autoCompleteProgress={autoCompleteProgress}
+                />;
             case GamePhase.PLAY:
                 if (story && currentNodeId) {
                     const pageMap = generatePageMap(story.nodes, story.startNodeId);
@@ -315,7 +412,8 @@ const App: React.FC = () => {
                                 onRegenerateNode={handleRegenerateNode}
                                 onRegenerateChoices={handleRegenerateChoices}
                                 onRequestDeleteNode={handleRequestDeleteNode}
-                                loading={loading}
+                                // FIX: Type 'string' is not assignable to type 'boolean'.
+                                loading={!!loading}
                             />
                         </>
                     );

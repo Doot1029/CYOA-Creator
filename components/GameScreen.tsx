@@ -46,6 +46,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
     const [infoTooltipId, setInfoTooltipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Content & AI');
     const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const [filterUnwritten, setFilterUnwritten] = useState(false);
+
 
     // AI Edit State
     const [aiEditPrompt, setAiEditPrompt] = useState('');
@@ -137,7 +139,16 @@ const GameScreen: React.FC<GameScreenProps> = ({
     };
 
     const jumpOptions = useMemo(() => {
-        return Array.from(pageMap.entries())
+        let pageEntries = Array.from(pageMap.entries());
+    
+        if (filterUnwritten) {
+            pageEntries = pageEntries.filter(([id]) => {
+                const node = story.nodes[id];
+                return node && node.choices.some(choice => !choice.nextNodeId);
+            });
+        }
+    
+        return pageEntries
             .map(([id, pageNumber]) => {
                 const node = story.nodes[id];
                 const firstLine = node.dialogue.split('\n')[0] || '[Empty Scene]';
@@ -145,7 +156,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
                 return { id, pageNumber, label: `Page ${pageNumber}: "${snippet}"` };
             })
             .sort((a, b) => a.pageNumber - b.pageNumber);
-    }, [story.nodes, pageMap]);
+    }, [story.nodes, pageMap, filterUnwritten]);
 
     const calculateDiffStats = (original: string, suggested: string): DiffStats => {
         const originalArr = original.split(/\s+/).filter(Boolean);
@@ -578,6 +589,16 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                     <select id="node-jump" onChange={e => onJump(e.target.value)} value={currentNodeId} className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none transition">
                                         {jumpOptions.map(opt => ( <option key={opt.id} value={opt.id}>{opt.label}</option>))}
                                     </select>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm pl-1">
+                                    <input
+                                        type="checkbox"
+                                        id="filter-unwritten"
+                                        checked={filterUnwritten}
+                                        onChange={e => setFilterUnwritten(e.target.checked)}
+                                        className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500"
+                                    />
+                                    <label htmlFor="filter-unwritten" className="text-gray-300">Show only pages with unwritten paths</label>
                                 </div>
                                 <button onClick={() => onRequestDeleteNode(currentNodeId)} disabled={loading || currentNodeId === story.startNodeId} className="w-full flex items-center justify-center gap-2 bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-900 disabled:opacity-50"><TrashIcon /> Delete This Page</button>
                                 <button onClick={() => onMarkAsEnding(currentNodeId)} disabled={isEnding || loading} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:opacity-50">Mark as Ending</button>

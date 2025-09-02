@@ -1,41 +1,45 @@
+
 import React, { useState, useEffect } from 'react';
 import { Story } from '../types';
 import { generateStoryPrompt, generateImage, generateInitialStoryNode, generateTitle, generateCoverArtPromptKeywords } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
-import { UploadIcon, CopyIcon } from './Icon';
+import { UploadIcon, CopyIcon, WandIcon } from './Icon';
 import StoryMetrics from './StoryMetrics';
+import Modal from './Modal';
 
 interface SetupScreenProps {
     onStartGame: (story: Story) => void;
+    onAutoCompleteStory: (storyData: Omit<Story, 'nodes' | 'startNodeId' | 'endNodeIds' | 'coverImageUrl'> & { coverImageUrl: string }) => void;
+    loading: string | null;
+    autoCompleteProgress: string | null;
 }
 
 const ART_STYLES = ['Digital Painting', 'Anime', 'Comic Book', 'Watercolor', 'Pixel Art', 'Photorealistic', 'Fantasy Art', 'Sci-Fi Concept Art', 'Steampunk'];
 const GENRES = ['Fantasy', 'Sci-Fi', 'Mystery', 'Horror', 'Adventure', 'Romance', 'Thriller', 'Cyberpunk', 'Steampunk'];
 
 
-const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
+const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame, onAutoCompleteStory, loading, autoCompleteProgress }) => {
     const [title, setTitle] = useState('');
     const [prompt, setPrompt] = useState('');
     const [coverImageUrl, setCoverImageUrl] = useState('');
     const [artStyle, setArtStyle] = useState(ART_STYLES[0]);
     const [genre, setGenre] = useState(GENRES[0]);
     const [endingConditions, setEndingConditions] = useState({ good: 3, bad: 3, mixed: 3 });
-    const [loading, setLoading] = useState<string | null>(null);
+    
     const [isCopyingPrompt, setIsCopyingPrompt] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const [showAutoCompleteConfirm, setShowAutoCompleteConfirm] = useState(false);
+
 
     const handleFile = (file: File | null) => {
         if (file && file.type.startsWith('image/')) {
-            setLoading('cover');
             const reader = new FileReader();
             reader.onloadend = () => {
                 setCoverImageUrl(reader.result as string);
-                setLoading(null);
             };
             reader.onerror = () => {
                 console.error("Failed to read file");
                 alert("Failed to read file.");
-                setLoading(null);
             }
             reader.readAsDataURL(file);
         } else if (file) {
@@ -89,15 +93,12 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
     };
 
     const handleGeneratePrompt = async () => {
-        setLoading('prompt');
         try {
             const newPrompt = await generateStoryPrompt(genre);
             setPrompt(newPrompt);
         } catch (error) {
             console.error(error);
             alert("Failed to generate prompt. Check console for details.");
-        } finally {
-            setLoading(null);
         }
     };
 
@@ -106,15 +107,12 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
             alert("Please generate or write a prompt first.");
             return;
         }
-        setLoading('title');
         try {
             const newTitle = await generateTitle(prompt);
             setTitle(newTitle);
         } catch (error) {
             console.error(error);
             alert("Failed to generate title.");
-        } finally {
-            setLoading(null);
         }
     }
 
@@ -123,7 +121,6 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
             alert("Please provide a title and prompt first.");
             return;
         }
-        setLoading('cover');
         try {
             const coverPromptKeywords = await generateCoverArtPromptKeywords(title, prompt, artStyle);
             const url = await generateImage(coverPromptKeywords, '3:4');
@@ -131,8 +128,6 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         } catch (error) {
             console.error(error);
             alert("Failed to generate cover image.");
-        } finally {
-            setLoading(null);
         }
     };
 
@@ -167,13 +162,14 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
             setEndingConditions(prev => ({ ...prev, [type]: numValue }));
         }
     };
+    
+    const canStart = () => title && prompt && coverImageUrl;
 
     const handleStart = async () => {
-        if (!title || !prompt || !coverImageUrl) {
+        if (!canStart()) {
             alert("Please provide a title, a prompt, and a cover image.");
             return;
         }
-        setLoading('start');
         try {
             const storyData = { title, prompt, artStyle, endingConditions };
             const initialNode = await generateInitialStoryNode(storyData);
@@ -194,15 +190,22 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         } catch (error) {
             console.error(error);
             alert("Failed to start the game. Check console for details.");
-        } finally {
-            setLoading(null);
         }
+    };
+    
+    const handleConfirmAutoComplete = () => {
+        if (!canStart()) {
+            alert("Please provide a title, a prompt, and a cover image before auto-generating.");
+            return;
+        }
+        setShowAutoCompleteConfirm(false);
+        const storyData = { title, prompt, artStyle, endingConditions, coverImageUrl };
+        onAutoCompleteStory(storyData);
     };
 
     const handleImportStory = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            setLoading('start');
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
@@ -216,22 +219,42 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                 } catch (error) {
                     console.error("Failed to import story:", error);
                     alert("Failed to import story. The file might be corrupted or in the wrong format.");
-                } finally {
-                    setLoading(null);
                 }
             };
             reader.onerror = () => {
                  console.error("Failed to read file");
                  alert("Failed to read file.");
-                 setLoading(null);
             }
             reader.readAsText(file);
         }
         event.target.value = ''; 
     };
+    
+    if (loading === 'auto-completing') {
+        return (
+            <div className="max-w-md mx-auto text-center bg-gray-800/50 p-8 rounded-lg shadow-lg border border-purple-500/30">
+                <h2 className="text-2xl font-bold font-title text-purple-300 mb-4">Generating Your Story...</h2>
+                <div className="flex justify-center mb-4">
+                    <LoadingSpinner />
+                </div>
+                <p className="mt-4 text-lg text-gray-300">{autoCompleteProgress}</p>
+                <p className="text-sm text-gray-400 mt-2">Please keep this window open. This may take several minutes depending on the complexity of the story.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-4xl mx-auto space-y-8">
+            {showAutoCompleteConfirm && (
+                <Modal
+                    type="confirm"
+                    title="Auto-Generate Full Story?"
+                    message="This will automatically generate all possible paths and choices for your story. This process may take several minutes and will make multiple API calls, which could incur costs. Are you sure you want to proceed?"
+                    confirmText="Yes, Generate It!"
+                    onConfirm={handleConfirmAutoComplete}
+                    onClose={() => setShowAutoCompleteConfirm(false)}
+                />
+            )}
             <div className="bg-gray-800/50 p-6 rounded-lg shadow-lg border border-purple-500/30">
                 <h2 className="text-2xl font-bold mb-4 font-title text-purple-300">1. Story Details</h2>
                 <div className="space-y-4">
@@ -243,8 +266,8 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                             onChange={e => setTitle(e.target.value)}
                             className="w-full bg-gray-700 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
                         />
-                         <button onClick={handleGenerateTitle} disabled={!!loading || !prompt} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-purple-800 disabled:cursor-not-allowed flex items-center justify-center whitespace-nowrap">
-                            {loading === 'title' ? <LoadingSpinner /> : 'Generate'}
+                         <button onClick={handleGenerateTitle} disabled={!!loading || !prompt} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center whitespace-nowrap">
+                            {'Generate'}
                         </button>
                     </div>
                      <div className="flex items-center gap-2">
@@ -264,8 +287,8 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                         onChange={e => setPrompt(e.target.value)}
                         className="w-full bg-gray-700 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none transition h-24"
                     />
-                    <button onClick={handleGeneratePrompt} disabled={!!loading} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-purple-800 disabled:cursor-not-allowed flex items-center justify-center">
-                        {loading === 'prompt' ? <LoadingSpinner /> : 'Generate Prompt'}
+                    <button onClick={handleGeneratePrompt} disabled={!!loading} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center">
+                        {'Generate Prompt'}
                     </button>
                 </div>
             </div>
@@ -279,7 +302,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                     >
-                        {loading === 'cover' ? <LoadingSpinner /> : coverImageUrl ? (
+                        {coverImageUrl ? (
                             <img src={coverImageUrl} alt="Cover Preview" className="w-full h-full object-cover rounded-md" />
                         ) : <p className="text-gray-400 text-center p-2">Generate, upload, or drop a cover image</p>}
                         {isDraggingOver && (
@@ -300,8 +323,8 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                                 {ART_STYLES.map(style => <option key={style} value={style}>{style}</option>)}
                             </select>
                         </div>
-                        <button onClick={handleGenerateCover} disabled={!!loading || !prompt || !title} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-purple-800 disabled:cursor-not-allowed flex items-center justify-center">
-                            {loading === 'cover' ? <LoadingSpinner /> : 'Generate Cover'}
+                        <button onClick={handleGenerateCover} disabled={!!loading || !prompt || !title} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center">
+                            {'Generate Cover'}
                         </button>
                         <label className="w-full cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-2">
                             <UploadIcon /> Upload Cover
@@ -361,8 +384,11 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
             </div>
 
             <div className="space-y-4">
-                <button onClick={handleStart} disabled={!!loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md transition text-xl disabled:bg-blue-800 disabled:cursor-not-allowed flex items-center justify-center">
+                <button onClick={handleStart} disabled={!!loading || !canStart()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md transition text-xl disabled:bg-blue-800 disabled:cursor-not-allowed flex items-center justify-center">
                     {loading === 'start' ? <LoadingSpinner /> : 'Start Your Adventure!'}
+                </button>
+                 <button onClick={() => setShowAutoCompleteConfirm(true)} disabled={!!loading || !canStart()} className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-4 rounded-md transition text-xl disabled:bg-pink-800 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <WandIcon /> Auto-Generate Full Story
                 </button>
                 <div className="text-center text-gray-400">or</div>
                 <label className="w-full cursor-pointer bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-md transition text-xl flex items-center justify-center gap-2">
