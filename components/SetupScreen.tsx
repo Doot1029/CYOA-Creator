@@ -9,12 +9,15 @@ interface SetupScreenProps {
 }
 
 const ART_STYLES = ['Digital Painting', 'Anime', 'Comic Book', 'Watercolor', 'Pixel Art', 'Photorealistic', 'Fantasy Art', 'Sci-Fi Concept Art', 'Steampunk'];
+const GENRES = ['Fantasy', 'Sci-Fi', 'Mystery', 'Horror', 'Adventure', 'Romance', 'Thriller', 'Cyberpunk', 'Steampunk'];
+
 
 const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
     const [title, setTitle] = useState('');
     const [prompt, setPrompt] = useState('');
     const [coverImageUrl, setCoverImageUrl] = useState('');
     const [artStyle, setArtStyle] = useState(ART_STYLES[0]);
+    const [genre, setGenre] = useState(GENRES[0]);
     const [endingConditions, setEndingConditions] = useState({ good: 3, bad: 3, mixed: 3 });
     const [loading, setLoading] = useState<string | null>(null);
     const [isCopyingPrompt, setIsCopyingPrompt] = useState(false);
@@ -87,7 +90,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
     const handleGeneratePrompt = async () => {
         setLoading('prompt');
         try {
-            const newPrompt = await generateStoryPrompt();
+            const newPrompt = await generateStoryPrompt(genre);
             setPrompt(newPrompt);
         } catch (error) {
             console.error(error);
@@ -242,6 +245,17 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                          <button onClick={handleGenerateTitle} disabled={!!loading || !prompt} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-purple-800 disabled:cursor-not-allowed flex items-center justify-center whitespace-nowrap">
                             {loading === 'title' ? <LoadingSpinner /> : 'Generate'}
                         </button>
+                    </div>
+                     <div className="flex items-center gap-2">
+                        <label htmlFor="genre-select" className="text-sm font-bold text-gray-300 whitespace-nowrap">Genre:</label>
+                        <select
+                            id="genre-select"
+                            value={genre}
+                            onChange={e => setGenre(e.target.value)}
+                            className="w-full bg-gray-700 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
+                        >
+                            {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
                     </div>
                     <textarea
                         placeholder="Enter your story prompt here, or generate one."

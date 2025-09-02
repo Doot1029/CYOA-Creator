@@ -48,11 +48,11 @@ const safelyParseJSON = <T,>(jsonString: string): T | null => {
 };
 
 
-export const generateStoryPrompt = async (): Promise<string> => {
+export const generateStoryPrompt = async (genre: string): Promise<string> => {
     const gemini = getAi();
     const response: GenerateContentResponse = await gemini.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: 'Generate a one-sentence story prompt for a choose-your-own-adventure visual novel. The theme should be fantasy, sci-fi, or mystery.',
+        contents: `Generate a one-sentence story prompt for a choose-your-own-adventure visual novel. The genre must be: ${genre}.`,
     });
     return response.text.trim();
 };
