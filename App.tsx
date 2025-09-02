@@ -52,18 +52,21 @@ const App: React.FC = () => {
                 if (!prevStory) return null;
 
                 const updatedNodes = { ...prevStory.nodes, [newId]: { ...newNode, id: newId } };
-                const fromNode = updatedNodes[fromNodeId];
-                
-                // Unset other choices and set the new one
-                fromNode.choices = fromNode.choices.map(c => ({
-                    ...c,
-                    isChosen: c.id === choice.id
-                }));
+                const fromNode = { ...updatedNodes[fromNodeId] }; // Create a mutable copy
 
-                const updatedChoice = fromNode.choices.find(c => c.id === choice.id);
-                if(updatedChoice) {
-                    updatedChoice.nextNodeId = newId;
-                }
+                // Find the specific choice and update it, marking it as explored.
+                fromNode.choices = fromNode.choices.map(c => {
+                    if (c.id === choice.id) {
+                        return {
+                            ...c,
+                            isChosen: true, // Mark as explored
+                            nextNodeId: newId,
+                        };
+                    }
+                    return c; // Leave other choices untouched
+                });
+
+                updatedNodes[fromNodeId] = fromNode; // Assign the updated node back
 
                 const updatedEndNodeIds = [...prevStory.endNodeIds];
                 if (newNode.choices.length === 0 && !updatedEndNodeIds.includes(newId)) {
@@ -115,17 +118,8 @@ const App: React.FC = () => {
     const handleChoiceJump = (choice: Choice, fromNodeId: string) => {
         if (!story || !choice.nextNodeId) return;
 
-        setStory(prev => {
-            if (!prev) return null;
-            const updatedNodes = { ...prev.nodes };
-            const fromNode = { ...updatedNodes[fromNodeId] };
-            fromNode.choices = fromNode.choices.map(c => 
-                ({...c, isChosen: c.id === choice.id })
-            );
-            updatedNodes[fromNodeId] = fromNode;
-            return { ...prev, nodes: updatedNodes };
-        });
-        
+        // Simply navigate to the next node. The "isChosen" state is persistent
+        // and doesn't need to be updated when just viewing an explored path.
         setCurrentNodeId(choice.nextNodeId);
         recalculateScoresAndSetState(choice.nextNodeId, story);
     };

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { generateImage, editStoryNodeDialogue, generateIllustrationPromptKeywords } from '../services/geminiService';
-import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, InfoIcon, RefreshIcon, MinusCircleIcon } from './Icon';
+import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, DownloadIcon, WandIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, InfoIcon, RefreshIcon, MinusCircleIcon } from './Icon';
 import StoryMetrics from './StoryMetrics';
 
 interface GameScreenProps {
@@ -485,14 +485,17 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                     onClick={() => handleChoiceClick(choice)}
                                     disabled={loading || isEnding}
                                     className={`flex-grow text-left p-3 rounded-md transition flex items-center justify-between ${
-                                        choice.isChosen ? 'bg-purple-900/70 text-gray-400' : 'bg-gray-700 hover:bg-purple-800/50'
+                                        choice.isChosen
+                                            ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-700/80' // Dimmed style for explored paths
+                                            : 'bg-purple-600 hover:bg-purple-700 text-white'     // Highlighted style for unexplored paths
                                     } disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed`}
                                 >
                                     <div className="flex items-center gap-3">
                                         {showPredictions && choice.prediction !== 'none' && (
                                             <div className="flex items-center gap-1.5">
                                                 <span className={`flex-shrink-0 ${
-                                                    choice.prediction === 'good' ? 'text-green-400' : choice.prediction === 'bad' ? 'text-red-400' : 'text-yellow-400'
+                                                    choice.isChosen ? 'text-gray-500' :
+                                                    choice.prediction === 'good' ? 'text-green-300' : choice.prediction === 'bad' ? 'text-red-300' : 'text-yellow-300'
                                                 }`} title={`AI Prediction: ${choice.prediction}`}>
                                                     {renderPredictionIcon(choice.prediction)}
                                                 </span>
@@ -503,7 +506,6 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                         )}
                                         <span>{choice.text}</span>
                                     </div>
-                                    {choice.isChosen && <CheckIcon />}
                                 </button>
                                 {choice.nextNodeId && (
                                     <button onClick={() => onRegenerateNode(choice, currentNodeId)} disabled={loading} className="opacity-0 group-hover:opacity-100 transition text-blue-400 hover:text-blue-300 p-1 disabled:opacity-50" title="Regenerate outcome">
