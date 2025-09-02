@@ -1,13 +1,13 @@
+
 import React from 'react';
-import { useState, useCallback } from 'react';
-import { GamePhase, Story, Choice, StoryNode } from './types';
+import { useState, useCallback, useMemo } from 'react';
+import { GamePhase, Story, Choice, StoryNode, ChoicePrediction } from './types';
 import SetupScreen from './components/SetupScreen';
 import GameScreen from './components/GameScreen';
 import ExportScreen from './components/ExportScreen';
 import Modal from './components/Modal';
-import StoryMapView from './components/StoryMapView';
-import { generateStoryNode, generateStoryNodeForEnding, generateFinalEndingNode, regenerateChoices } from './services/geminiService';
-import { generatePageMap } from './utils/storyUtils';
+import { generateStoryNode, regenerateChoices } from './services/geminiService';
+import { generatePageMap, calculatePathScores, getParentMap } from './utils/storyUtils';
 
 interface ModalConfig {
     type: 'confirm' | 'prompt';
@@ -17,125 +17,79 @@ interface ModalConfig {
     onConfirm: (value?: string) => void;
 }
 
+type PathScores = Record<Exclude<ChoicePrediction, 'none'>, number>;
+
 const App: React.FC = () => {
     const [gamePhase, setGamePhase] = useState<GamePhase>(GamePhase.SETUP);
     const [story, setStory] = useState<Story | null>(null);
     const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+    const [pathScores, setPathScores] = useState<PathScores>({ good: 0, bad: 0, mixed: 0 });
     const [loading, setLoading] = useState(false);
-    const [isGeneratingEnding, setIsGeneratingEnding] = useState(false);
     const [modalConfig, setModalConfig] = useState<ModalConfig | null>(null);
-    const [isMapViewVisible, setIsMapViewVisible] = useState(false);
     const [showPredictions, setShowPredictions] = useState(false);
 
     const handleStartGame = (initialStory: Story) => {
         setStory(initialStory);
         setCurrentNodeId(initialStory.startNodeId);
+        setPathScores({ good: 0, bad: 0, mixed: 0 });
         setGamePhase(GamePhase.PLAY);
     };
 
     const handleNavigate = useCallback(async (choice: Choice, fromNodeId: string) => {
         if (!story) return;
         setLoading(true);
+
+        const newScores = { ...pathScores };
+        if (choice.prediction !== 'none') {
+            newScores[choice.prediction]++;
+        }
+
         try {
-            const newNode = await generateStoryNode(story, fromNodeId, choice);
+            const newNode = await generateStoryNode(story, fromNodeId, choice, newScores);
             const newId = `node_${Date.now()}`;
             
             setStory(prevStory => {
                 if (!prevStory) return null;
+
                 const updatedNodes = { ...prevStory.nodes, [newId]: { ...newNode, id: newId } };
                 const fromNode = updatedNodes[fromNodeId];
+                
+                // Unset other choices and set the new one
+                fromNode.choices = fromNode.choices.map(c => ({
+                    ...c,
+                    isChosen: c.id === choice.id
+                }));
+
                 const updatedChoice = fromNode.choices.find(c => c.id === choice.id);
                 if(updatedChoice) {
                     updatedChoice.nextNodeId = newId;
-                    updatedChoice.isChosen = true;
                 }
-                return { ...prevStory, nodes: updatedNodes };
+
+                const updatedEndNodeIds = [...prevStory.endNodeIds];
+                if (newNode.choices.length === 0 && !updatedEndNodeIds.includes(newId)) {
+                    updatedEndNodeIds.push(newId);
+                }
+
+                return { ...prevStory, nodes: updatedNodes, endNodeIds: updatedEndNodeIds };
             });
+
             setCurrentNodeId(newId);
+            setPathScores(newScores);
+
         } catch (error) {
             console.error("Failed to generate next story node:", error);
             alert(`There was an error generating the next part of the story: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setLoading(false);
         }
-    }, [story]);
+    }, [story, pathScores]);
     
-    const handleRequestGenerateEnding = (fromNodeId: string) => {
-        setModalConfig({
-            type: 'prompt',
-            title: 'Generate Ending Path',
-            message: 'Enter the text for the choice that begins the ending sequence:',
-            defaultValue: "Head towards the story's conclusion.",
-            onConfirm: (choiceText) => {
-                setModalConfig(null);
-                if (choiceText) {
-                    generateEndingPath(fromNodeId, choiceText);
-                }
-            },
-        });
-    };
+    const recalculateScoresAndSetState = useCallback((targetNodeId: string, currentStory: Story) => {
+        const parentMap = getParentMap(currentStory);
+        const newScores = calculatePathScores(currentStory, targetNodeId, parentMap);
+        setPathScores(newScores);
+    }, []);
 
-    const generateEndingPath = async (fromNodeId: string, choiceText: string) => {
-        if (!story) return;
-        setIsGeneratingEnding(true);
-
-        try {
-            let updatedStory = JSON.parse(JSON.stringify(story)); // Deep copy
-
-            const startChoiceId = `choice_ending_start_${Date.now()}`;
-            const newChoice: Choice = { 
-                id: startChoiceId, 
-                text: choiceText, 
-                nextNodeId: null, 
-                isChosen: true,
-                prediction: 'ending',
-                predictionRationale: 'This choice begins the final sequence of the story.'
-            };
-            updatedStory.nodes[fromNodeId].choices.push(newChoice);
-
-            let previousNodeId = fromNodeId;
-            let previousChoice: Choice = newChoice;
-
-            const ENDING_PATH_LENGTH = 3;
-
-            for (let i = 1; i < ENDING_PATH_LENGTH; i++) {
-                const newNodeData = await generateStoryNodeForEnding(updatedStory, previousNodeId, previousChoice, i, ENDING_PATH_LENGTH);
-                const newNodeId = `node_ending_${i}_${Date.now()}`;
-                const newNode: StoryNode = { ...newNodeData, id: newNodeId };
-
-                updatedStory.nodes[newNodeId] = newNode;
-                const prevNodeChoice = updatedStory.nodes[previousNodeId].choices.find((c: Choice) => c.id === previousChoice.id);
-                if (prevNodeChoice) prevNodeChoice.nextNodeId = newNodeId;
-
-                previousNodeId = newNodeId;
-                if (!newNode.choices || newNode.choices.length === 0) {
-                    updatedStory.endNodeIds.push(newNodeId);
-                    setStory(updatedStory);
-                    setIsGeneratingEnding(false);
-                    return;
-                }
-                previousChoice = newNode.choices[0];
-            }
-
-            const finalNodeData = await generateFinalEndingNode(updatedStory, previousNodeId, previousChoice);
-            const finalNodeId = `node_ending_final_${Date.now()}`;
-            const finalNode: StoryNode = { dialogue: finalNodeData.dialogue, choices: [], id: finalNodeId };
-
-            updatedStory.nodes[finalNodeId] = finalNode;
-            const prevNodeChoice = updatedStory.nodes[previousNodeId].choices.find((c: Choice) => c.id === previousChoice.id);
-            if (prevNodeChoice) prevNodeChoice.nextNodeId = finalNodeId;
-            
-            updatedStory.endNodeIds.push(finalNodeId);
-            setStory(updatedStory);
-
-        } catch (error) {
-            console.error("Failed to generate ending path:", error);
-            alert(`An error occurred while generating the ending path: ${error instanceof Error ? error.message : String(error)}`);
-        } finally {
-            setIsGeneratingEnding(false);
-        }
-    };
-    
     const handleRequestMarkAsEnding = (nodeId: string) => {
         setModalConfig({
             type: 'confirm',
@@ -144,8 +98,12 @@ const App: React.FC = () => {
             onConfirm: () => {
                 setStory(prev => {
                     if (!prev || prev.endNodeIds.includes(nodeId)) return prev;
+                    // Clear choices when manually marking as an ending
+                    const updatedNode = { ...prev.nodes[nodeId], choices: [] };
+                    const updatedNodes = { ...prev.nodes, [nodeId]: updatedNode };
                     return {
                         ...prev,
+                        nodes: updatedNodes,
                         endNodeIds: [...prev.endNodeIds, nodeId]
                     };
                 });
@@ -155,21 +113,27 @@ const App: React.FC = () => {
     };
 
     const handleChoiceJump = (choice: Choice, fromNodeId: string) => {
+        if (!story || !choice.nextNodeId) return;
+
         setStory(prev => {
             if (!prev) return null;
             const updatedNodes = { ...prev.nodes };
             const fromNode = { ...updatedNodes[fromNodeId] };
             fromNode.choices = fromNode.choices.map(c => 
-                c.id === choice.id ? { ...c, isChosen: true } : c
+                ({...c, isChosen: c.id === choice.id })
             );
             updatedNodes[fromNodeId] = fromNode;
             return { ...prev, nodes: updatedNodes };
         });
-        setCurrentNodeId(choice.nextNodeId!);
+        
+        setCurrentNodeId(choice.nextNodeId);
+        recalculateScoresAndSetState(choice.nextNodeId, story);
     };
     
     const handleJumpToNode = (nodeId: string) => {
+        if (!story) return;
         setCurrentNodeId(nodeId);
+        recalculateScoresAndSetState(nodeId, story);
     };
 
     const handleGoToExport = () => {
@@ -189,8 +153,17 @@ const App: React.FC = () => {
     const handleRegenerateNode = async (choice: Choice, fromNodeId: string) => {
         if (!story || !choice.nextNodeId) return;
         setLoading(true);
+
+        // Recalculate scores up to the point *before* the node to be regenerated
+        const parentMap = getParentMap(story);
+        const scoresAtPreviousNode = calculatePathScores(story, fromNodeId, parentMap);
+        const newScores = { ...scoresAtPreviousNode };
+        if (choice.prediction !== 'none') {
+             newScores[choice.prediction]++;
+        }
+        
         try {
-            const regeneratedNodeData = await generateStoryNode(story, fromNodeId, choice);
+            const regeneratedNodeData = await generateStoryNode(story, fromNodeId, choice, newScores);
             const targetNodeId = choice.nextNodeId;
 
             setStory(prevStory => {
@@ -202,9 +175,21 @@ const App: React.FC = () => {
                     ...regeneratedNodeData, 
                     id: targetNodeId 
                 };
-                return { ...prevStory, nodes: updatedNodes };
+                
+                const updatedEndNodeIds = [...prevStory.endNodeIds];
+                const isEnding = regeneratedNodeData.choices.length === 0;
+                if(isEnding && !updatedEndNodeIds.includes(targetNodeId)) {
+                    updatedEndNodeIds.push(targetNodeId);
+                } else if (!isEnding && updatedEndNodeIds.includes(targetNodeId)) {
+                    updatedEndNodeIds.splice(updatedEndNodeIds.indexOf(targetNodeId), 1);
+                }
+
+                return { ...prevStory, nodes: updatedNodes, endNodeIds: updatedEndNodeIds };
             });
+
             setCurrentNodeId(targetNodeId); 
+            recalculateScoresAndSetState(targetNodeId, story);
+
         } catch (error) {
             console.error("Failed to regenerate story node:", error);
             alert(`There was an error regenerating the story: ${error instanceof Error ? error.message : String(error)}`);
@@ -292,6 +277,7 @@ const App: React.FC = () => {
         });
 
         setCurrentNodeId(story.startNodeId);
+        recalculateScoresAndSetState(story.startNodeId, story);
         alert(`Deleted page and ${nodesToDelete.size - 1} connected sub-pages.`);
     };
 
@@ -329,26 +315,14 @@ const App: React.FC = () => {
                                 onJump={handleJumpToNode}
                                 onChoiceJump={handleChoiceJump}
                                 onExport={handleGoToExport}
-                                onGenerateEnding={handleRequestGenerateEnding}
                                 onMarkAsEnding={handleRequestMarkAsEnding}
-                                onShowMap={() => setIsMapViewVisible(true)}
                                 showPredictions={showPredictions}
                                 onTogglePredictions={() => setShowPredictions(p => !p)}
                                 onRegenerateNode={handleRegenerateNode}
                                 onRegenerateChoices={handleRegenerateChoices}
                                 onRequestDeleteNode={handleRequestDeleteNode}
                                 loading={loading}
-                                isGeneratingEnding={isGeneratingEnding}
                             />
-                            {isMapViewVisible && (
-                                <StoryMapView
-                                    story={story}
-                                    currentNodeId={currentNodeId}
-                                    pageMap={pageMap}
-                                    onJump={handleJumpToNode}
-                                    onClose={() => setIsMapViewVisible(false)}
-                                />
-                            )}
                         </>
                     );
                 }

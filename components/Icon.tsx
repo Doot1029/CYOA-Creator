@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 export const TrashIcon: React.FC = () => (
@@ -15,12 +16,6 @@ export const PlusIcon: React.FC = () => (
 export const EditIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" />
-    </svg>
-);
-
-export const MapIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13v-6m0-6V4m0 6h6m-6 0l6-3m-6 3l6 3" />
     </svg>
 );
 
@@ -95,9 +90,9 @@ export const ThumbsDownIcon: React.FC = () => (
     </svg>
 );
 
-export const FlagIcon: React.FC = () => (
+export const BalanceIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6H8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a2 2 0 002 2h14a2 2 0 002-2l-3-9m-11 0l3-1m5 1l-3-1m0 0l-3 1m5-1V3m-3 13h6" />
     </svg>
 );
 

@@ -15,6 +15,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
     const [prompt, setPrompt] = useState('');
     const [coverImageUrl, setCoverImageUrl] = useState('');
     const [artStyle, setArtStyle] = useState(ART_STYLES[0]);
+    const [endingConditions, setEndingConditions] = useState({ good: 3, bad: 3, mixed: 3 });
     const [loading, setLoading] = useState<string | null>(null);
     const [isCopyingPrompt, setIsCopyingPrompt] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -156,6 +157,13 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         }
     };
 
+    const handleEndingConditionChange = (type: keyof typeof endingConditions, value: string) => {
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue) && numValue >= 1) {
+            setEndingConditions(prev => ({ ...prev, [type]: numValue }));
+        }
+    };
+
     const handleStart = async () => {
         if (!title || !prompt || !coverImageUrl) {
             alert("Please provide a title, a prompt, and a cover image.");
@@ -163,7 +171,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
         }
         setLoading('start');
         try {
-            const storyData = { title, prompt, artStyle };
+            const storyData = { title, prompt, artStyle, endingConditions };
             const initialNode = await generateInitialStoryNode(storyData);
             
             const startNodeId = `node_start_${Date.now()}`;
@@ -289,6 +297,49 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                             {isCopyingPrompt ? 'Generating...' : 'Copy Prompt'}
                         </button>
                         <p className="text-xs text-gray-400 text-center pt-1">You can also drag & drop or paste an image.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-gray-800/50 p-6 rounded-lg shadow-lg border border-purple-500/30">
+                <h2 className="text-2xl font-bold mb-4 font-title text-purple-300">3. Ending Conditions</h2>
+                <p className="text-sm text-gray-400 mb-4">Set the number of choices of a certain type needed to trigger an ending. The story will automatically conclude when a threshold is met.</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-2">
+                        <label htmlFor="good-ending" className="font-bold text-green-400">Good Ending</label>
+                        <input
+                            type="number"
+                            id="good-ending"
+                            min="1"
+                            value={endingConditions.good}
+                            onChange={e => handleEndingConditionChange('good', e.target.value)}
+                            className="w-full bg-gray-700 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-green-500 focus:outline-none transition"
+                        />
+                        <p className="text-xs text-gray-400"># of 'Good' choices to reach.</p>
+                    </div>
+                     <div className="flex flex-col gap-2">
+                        <label htmlFor="bad-ending" className="font-bold text-red-400">Bad Ending</label>
+                        <input
+                            type="number"
+                            id="bad-ending"
+                             min="1"
+                            value={endingConditions.bad}
+                            onChange={e => handleEndingConditionChange('bad', e.target.value)}
+                            className="w-full bg-gray-700 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-red-500 focus:outline-none transition"
+                        />
+                         <p className="text-xs text-gray-400"># of 'Bad' choices to reach.</p>
+                    </div>
+                     <div className="flex flex-col gap-2">
+                        <label htmlFor="mixed-ending" className="font-bold text-yellow-400">Mixed Ending</label>
+                        <input
+                            type="number"
+                            id="mixed-ending"
+                             min="1"
+                            value={endingConditions.mixed}
+                            onChange={e => handleEndingConditionChange('mixed', e.target.value)}
+                            className="w-full bg-gray-700 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition"
+                        />
+                         <p className="text-xs text-gray-400"># of 'Mixed' choices to reach.</p>
                     </div>
                 </div>
             </div>

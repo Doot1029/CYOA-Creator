@@ -132,7 +132,7 @@ export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'sta
 
         Write the very first scene of the story as a single block of text. It should be an engaging introduction that sets the scene.
         Then, provide 3 choices for the player to make.
-        For each choice, provide a 'prediction' field: 'good' (likely positive outcome), 'bad' (likely negative outcome), or 'ending' (moves story to conclusion).
+        For each choice, provide a 'prediction' field: 'good' (likely positive outcome), 'bad' (likely negative outcome), or 'mixed' (a combination of good and bad outcomes, or an ambiguous result).
         Also provide a 'predictionRationale' field explaining your prediction in one short sentence.
     `;
     
@@ -155,7 +155,7 @@ export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'sta
                             type: Type.OBJECT,
                             properties: {
                                 text: { type: Type.STRING, description: "The text for a choice the player can make." },
-                                prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'ending'." },
+                                prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'mixed'." },
                                 predictionRationale: { type: Type.STRING, description: "A brief justification for the prediction." }
                             }
                         }
@@ -181,10 +181,75 @@ export const generateInitialStoryNode = async (story: Omit<Story, 'nodes' | 'sta
     };
 };
 
-export const generateStoryNode = async (story: Story, fromNodeId: string, choiceMade: Choice): Promise<Omit<StoryNode, 'id'>> => {
+export const generateStoryNode = async (story: Story, fromNodeId: string, choiceMade: Choice, pathScores: { good: number; bad: number; mixed: number; }): Promise<Omit<StoryNode, 'id'>> => {
     const gemini = getAi();
     const previousNode = story.nodes[fromNodeId];
-    
+
+    const { good, bad, mixed } = pathScores;
+    const { good: goodTarget, bad: badTarget, mixed: mixedTarget } = story.endingConditions;
+
+    let endingType: 'good' | 'bad' | 'mixed' | null = null;
+    if (good >= goodTarget) endingType = 'good';
+    else if (bad >= badTarget) endingType = 'bad';
+    else if (mixed >= mixedTarget) endingType = 'mixed';
+
+    let instructions: string;
+    let responseSchema: any;
+
+    if (endingType) {
+        instructions = `
+        CRITICAL INSTRUCTION: The player's actions have led to the '${endingType}' ending.
+        1. Write the final, concluding scene for the story that reflects a '${endingType}' outcome based on the story so far.
+        2. This is the definitive end. Wrap up the story.
+        3. DO NOT provide any choices. The 'choices' array in your JSON response MUST be empty.
+        `;
+        responseSchema = {
+            type: Type.OBJECT,
+            properties: {
+                dialogue: {
+                    type: Type.STRING,
+                    description: `The final concluding script for the '${endingType}' ending.`
+                },
+                choices: {
+                    type: Type.ARRAY,
+                    description: "This MUST be an empty array as it is an ending."
+                }
+            }
+        };
+    } else {
+        instructions = `
+        The player has not yet reached an ending.
+        Current path score: ${good} good, ${bad} bad, ${mixed} mixed choices.
+        Ending requires: ${goodTarget} good, ${badTarget} bad, or ${mixedTarget} mixed choices.
+        
+        Instructions:
+        1. Write the next part of the story as a single block of text. The outcome MUST align with the choice's prediction ('${choiceMade.prediction || 'neutral'}').
+        2. Provide 3 new, distinct choices for the player to continue the adventure.
+        3. For each new choice, provide a 'prediction' ('good', 'bad', or 'mixed') and a short 'predictionRationale'.
+        `;
+        responseSchema = {
+            type: Type.OBJECT,
+            properties: {
+                dialogue: {
+                    type: Type.STRING,
+                    description: "The script for the new scene, as a single block of text.",
+                },
+                choices: {
+                    type: Type.ARRAY,
+                    description: "The new choices for the player.",
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            text: { type: Type.STRING, description: "The text for a new choice." },
+                            prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'mixed'." },
+                            predictionRationale: { type: Type.STRING, description: "A brief justification for the prediction." }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     const prompt = `
         Continue a choose-your-own-adventure story based on the previous events and the user's choice.
         
@@ -197,10 +262,7 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
         "${choiceMade.text}"
         This choice was predicted to have a '${choiceMade.prediction || 'neutral'}' outcome. AI Rationale: "${choiceMade.predictionRationale || 'N/A'}"
 
-        Instructions:
-        1. Write the next part of the story as a single block of text. The outcome MUST align with the choice's prediction ('${choiceMade.prediction || 'neutral'}').
-        2. Provide 3 new, distinct choices for the player to continue the adventure.
-        3. For each new choice, provide a 'prediction' ('good', 'bad', or 'ending') and a short 'predictionRationale'.
+        ${instructions}
     `;
 
     const response = await gemini.models.generateContent({
@@ -208,27 +270,7 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
         contents: prompt,
         config: {
             responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    dialogue: {
-                        type: Type.STRING,
-                        description: "The script for the new scene, as a single block of text.",
-                    },
-                    choices: {
-                        type: Type.ARRAY,
-                        description: "The new choices for the player.",
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                text: { type: Type.STRING, description: "The text for a new choice." },
-                                prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'ending'." },
-                                predictionRationale: { type: Type.STRING, description: "A brief justification for the prediction." }
-                            }
-                        }
-                    }
-                }
-            },
+            responseSchema,
             thinkingConfig: { thinkingBudget: 0 },
         }
     });
@@ -238,14 +280,14 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
 
     return {
         dialogue: result.dialogue,
-        choices: result.choices.map(c => ({ 
+        choices: result.choices ? result.choices.map(c => ({ 
             id: `choice_${Date.now()}_${Math.random()}`, 
             text: c.text, 
             nextNodeId: null, 
             isChosen: false,
             prediction: c.prediction || 'none', 
             predictionRationale: c.predictionRationale || 'No rationale provided by AI.' 
-        }))
+        })) : []
     };
 };
 
@@ -263,7 +305,7 @@ export const regenerateChoices = async (story: Story, nodeId: string): Promise<{
         Instructions:
         1. Generate exactly 3 new, creative, and distinct choices based on the scene's text.
         2. Do NOT repeat any of the previous choices.
-        3. For each new choice, provide a 'prediction' of the outcome ('good', 'bad', or 'ending').
+        3. For each new choice, provide a 'prediction' of the outcome ('good', 'bad', or 'mixed').
         4. For each prediction, provide a short 'predictionRationale'.
     `;
 
@@ -282,7 +324,7 @@ export const regenerateChoices = async (story: Story, nodeId: string): Promise<{
                             type: Type.OBJECT,
                             properties: {
                                 text: { type: Type.STRING, description: "The text for a new choice." },
-                                prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'ending'." },
+                                prediction: { type: Type.STRING, description: "The predicted outcome: 'good', 'bad', or 'mixed'." },
                                 predictionRationale: { type: Type.STRING, description: "A brief justification for the prediction." }
                             }
                         }
@@ -299,118 +341,6 @@ export const regenerateChoices = async (story: Story, nodeId: string): Promise<{
     return {
         choices: result.choices,
     };
-};
-
-export const generateStoryNodeForEnding = async (story: Story, fromNodeId: string, choiceMade: Choice, step: number, totalSteps: number): Promise<Omit<StoryNode, 'id'>> => {
-    const gemini = getAi();
-    const previousNode = story.nodes[fromNodeId];
-    
-    const prompt = `
-        Continue a choose-your-own-adventure story, moving it towards a conclusion. This is step ${step} of ${totalSteps} in the ending sequence.
-        
-        Overall Story Prompt: ${story.prompt}
-
-        Previous Scene:
-        ${previousNode.dialogue}
-
-        Player's Choice That Started Ending Sequence:
-        "${choiceMade.text}"
-
-        Instructions:
-        1. Write the next part of the story as a single block of text. It should clearly progress the story towards a final resolution, consistent with an 'ending' path.
-        2. Provide 2 new, distinct choices for the player that continue down this path to the end.
-        3. For each choice, provide a 'prediction' (which should be 'ending') and a 'predictionRationale'.
-    `;
-
-    const response = await gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    dialogue: {
-                        type: Type.STRING,
-                        description: "The script for the new scene, progressing to the end.",
-                    },
-                    choices: {
-                        type: Type.ARRAY,
-                        description: "The new choices for the player.",
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                text: { type: Type.STRING, description: "The text for a new choice." },
-                                prediction: { type: Type.STRING, description: "The predicted outcome. Use 'ending'." },
-                                predictionRationale: { type: Type.STRING, description: "A brief justification for the prediction." }
-                            }
-                        }
-                    }
-                }
-            },
-            thinkingConfig: { thinkingBudget: 0 },
-        }
-    });
-
-    const result = safelyParseJSON<{dialogue: string, choices: {text: string, prediction: ChoicePrediction, predictionRationale: string}[]}>(response.text);
-    if (!result) throw new Error("Failed to generate next story node for ending.");
-
-    return {
-        dialogue: result.dialogue,
-        choices: result.choices.map(c => ({ 
-            id: `choice_${Date.now()}_${Math.random()}`, 
-            text: c.text, 
-            nextNodeId: null, 
-            isChosen: false,
-            prediction: c.prediction || 'none', 
-            predictionRationale: c.predictionRationale || 'No rationale provided by AI.' 
-        }))
-    };
-};
-
-export const generateFinalEndingNode = async (story: Story, fromNodeId: string, choiceMade: Choice): Promise<{ dialogue: string }> => {
-    const gemini = getAi();
-    const previousNode = story.nodes[fromNodeId];
-    
-    const prompt = `
-        This is the final scene of a choose-your-own-adventure story. Write a definitive conclusion based on the story so far and the final choice made.
-        
-        Overall Story Prompt: ${story.prompt}
-
-        Previous Scene:
-        ${previousNode.dialogue}
-
-        Player's Final Choice:
-        "${choiceMade.text}"
-
-        Instructions:
-        1. Write the final, concluding scene for the story as a single block of text.
-        2. This is the definitive end. Wrap up major plot points.
-        3. DO NOT provide any choices.
-    `;
-
-    const response = await gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    dialogue: {
-                        type: Type.STRING,
-                        description: "The final, concluding script for the story.",
-                    }
-                }
-            },
-            thinkingConfig: { thinkingBudget: 0 },
-        }
-    });
-
-    const result = safelyParseJSON<{dialogue: string}>(response.text);
-    if (!result) throw new Error("Failed to generate final ending node.");
-
-    return { dialogue: result.dialogue };
 };
 
 export const editStoryNodeDialogue = async (originalDialogue: string, userPrompt: string): Promise<{ newDialogue: string }> => {

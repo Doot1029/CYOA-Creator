@@ -4,7 +4,7 @@ export enum GamePhase {
     EXPORT = 'export'
 }
 
-export type ChoicePrediction = 'good' | 'bad' | 'ending' | 'none';
+export type ChoicePrediction = 'good' | 'bad' | 'mixed' | 'none';
 
 export interface Choice {
     id: string;
@@ -27,6 +27,11 @@ export interface Story {
     coverImageUrl: string; // base64 string
     prompt: string;
     artStyle: string;
+    endingConditions: {
+        good: number;
+        bad: number;
+        mixed: number;
+    };
     nodes: Record<string, StoryNode>;
     startNodeId: string;
     endNodeIds: string[];

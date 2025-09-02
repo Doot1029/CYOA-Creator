@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { generateImage, editStoryNodeDialogue, generateIllustrationPromptKeywords } from '../services/geminiService';
-import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, MapIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, FlagIcon, InfoIcon, RefreshIcon, ArrowLeftIcon, HomeIcon } from './Icon';
+import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, InfoIcon, RefreshIcon, BalanceIcon } from './Icon';
 
 interface GameScreenProps {
     story: Story;
@@ -13,16 +14,13 @@ interface GameScreenProps {
     onChoiceJump: (choice: Choice, fromNodeId: string) => void;
     onJump: (nodeId: string) => void;
     onExport: () => void;
-    onGenerateEnding: (fromNodeId: string) => void;
     onMarkAsEnding: (nodeId: string) => void;
-    onShowMap: () => void;
     showPredictions: boolean;
     onTogglePredictions: () => void;
     onRegenerateNode: (choice: Choice, fromNodeId: string) => void;
     onRegenerateChoices: (nodeId: string) => void;
     onRequestDeleteNode: (nodeId: string) => void;
     loading: boolean;
-    isGeneratingEnding: boolean;
 }
 
 type AiEditStatus = 'idle' | 'loading' | 'hasSuggestion';
@@ -33,10 +31,10 @@ const ART_STYLES = ['Digital Painting', 'Anime', 'Comic Book', 'Watercolor', 'Pi
 const GameScreen: React.FC<GameScreenProps> = ({ 
     story, setStory, currentNodeId, pageMap, 
     onNavigate, onJump, onChoiceJump, onExport, 
-    onGenerateEnding, onMarkAsEnding, onShowMap, 
+    onMarkAsEnding,
     showPredictions, onTogglePredictions, 
     onRegenerateNode, onRegenerateChoices, onRequestDeleteNode,
-    loading, isGeneratingEnding 
+    loading
 }) => {
     const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
     const [illustrationLoading, setIllustrationLoading] = useState(false);
@@ -360,7 +358,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         switch (prediction) {
             case 'good': return <ThumbsUpIcon />;
             case 'bad': return <ThumbsDownIcon />;
-            case 'ending': return <FlagIcon />;
+            case 'mixed': return <BalanceIcon />;
             case 'none': default: return null;
         }
     };
@@ -476,7 +474,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                         {showPredictions && choice.prediction !== 'none' && (
                                             <div className="flex items-center gap-1.5">
                                                 <span className={`flex-shrink-0 ${
-                                                    choice.prediction === 'good' ? 'text-green-400' : choice.prediction === 'bad' ? 'text-red-400' : 'text-blue-400'
+                                                    choice.prediction === 'good' ? 'text-green-400' : choice.prediction === 'bad' ? 'text-red-400' : 'text-yellow-400'
                                                 }`} title={`AI Prediction: ${choice.prediction}`}>
                                                     {renderPredictionIcon(choice.prediction)}
                                                 </span>
@@ -548,8 +546,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                         )}
                                     </div>
                                 )}
-                                <button onClick={handleAddChoice} disabled={loading || isGeneratingEnding} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-blue-800 disabled:cursor-not-allowed"><PlusIcon /> Add a Choice</button>
-                                <button onClick={() => onRegenerateChoices(currentNodeId)} disabled={loading || isGeneratingEnding} className="w-full flex items-center justify-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-pink-800 disabled:cursor-not-allowed"><WandIcon /> Regenerate Choices</button>
+                                <button onClick={handleAddChoice} disabled={loading} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-blue-800 disabled:cursor-not-allowed"><PlusIcon /> Add a Choice</button>
+                                <button onClick={() => onRegenerateChoices(currentNodeId)} disabled={loading} className="w-full flex items-center justify-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-pink-800 disabled:cursor-not-allowed"><WandIcon /> Regenerate Choices</button>
                                 <button onClick={onTogglePredictions} className="w-full flex items-center justify-center gap-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition"><BrainIcon /> {showPredictions ? 'Hide' : 'Show'} AI Predictions</button>
                             </>
                         )}
@@ -561,17 +559,12 @@ const GameScreen: React.FC<GameScreenProps> = ({
                                         {jumpOptions.map(opt => ( <option key={opt.id} value={opt.id}>{opt.label}</option>))}
                                     </select>
                                 </div>
-                                <button onClick={() => onRequestDeleteNode(currentNodeId)} disabled={loading || isGeneratingEnding || currentNodeId === story.startNodeId} className="w-full flex items-center justify-center gap-2 bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-900 disabled:opacity-50"><TrashIcon /> Delete This Page</button>
-                                <button onClick={() => onMarkAsEnding(currentNodeId)} disabled={isEnding || loading || isGeneratingEnding} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:opacity-50">Mark as Ending</button>
+                                <button onClick={() => onRequestDeleteNode(currentNodeId)} disabled={loading || currentNodeId === story.startNodeId} className="w-full flex items-center justify-center gap-2 bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-900 disabled:opacity-50"><TrashIcon /> Delete This Page</button>
+                                <button onClick={() => onMarkAsEnding(currentNodeId)} disabled={isEnding || loading} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:opacity-50">Mark as Ending</button>
                             </>
                         )}
                          {activeTab === 'Story Actions' && (
                             <>
-                                <button onClick={onShowMap} className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition"><MapIcon /> Story Map</button>
-                                <button onClick={() => onGenerateEnding(currentNodeId)} disabled={loading || isGeneratingEnding} className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-teal-800 disabled:cursor-not-allowed">
-                                    {isGeneratingEnding ? <LoadingSpinner/> : <WandIcon />}
-                                    {isGeneratingEnding ? 'Generating...' : 'Generate Ending Path'}
-                                </button>
                                 <button onClick={handleExportStoryData} className="w-full flex items-center justify-center gap-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition"><DownloadIcon /> Export Story Data</button>
                                  <button onClick={onExport} className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition"><BookIcon /> Export to Printable Book</button>
                             </>

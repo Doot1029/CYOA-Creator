@@ -1,4 +1,4 @@
-import { StoryNode } from '../types';
+import { Story, StoryNode, ChoicePrediction } from '../types';
 
 /**
  * Generates a stable mapping from node ID to a sequential page number.
@@ -42,4 +42,68 @@ export const generatePageMap = (nodes: Record<string, StoryNode>, startNodeId: s
     });
 
     return pageMap;
+};
+
+
+/**
+ * Creates a map of child node IDs to their parent node IDs for efficient path traversal.
+ * @param story - The full story object.
+ * @returns A Map where keys are child node IDs and values are parent node IDs.
+ */
+export const getParentMap = (story: Story): Map<string, string> => {
+    const parentMap = new Map<string, string>();
+    for (const nodeId in story.nodes) {
+        for (const choice of story.nodes[nodeId].choices) {
+            if (choice.nextNodeId) {
+                parentMap.set(choice.nextNodeId, nodeId);
+            }
+        }
+    }
+    return parentMap;
+};
+
+/**
+ * Calculates the cumulative score of good, bad, and mixed choices along the path to a target node.
+ * It traces back from the target node to the start node using a parent map.
+ * @param story - The full story object.
+ * @param targetNodeId - The ID of the node to calculate the path score for.
+ * @param parentMap - A pre-computed map of child-to-parent node relationships.
+ * @returns An object containing the counts of good, bad, and mixed choices.
+ */
+export const calculatePathScores = (
+    story: Story,
+    targetNodeId: string,
+    parentMap: Map<string, string>
+): { good: number; bad: number; mixed: number } => {
+    const scores: { good: number; bad: number; mixed: number } = { good: 0, bad: 0, mixed: 0 };
+
+    // Build the path from start to target by tracing back from the target
+    const path: string[] = [];
+    let currentId: string | undefined = targetNodeId;
+    while (currentId) {
+        path.unshift(currentId);
+        if (currentId === story.startNodeId) break;
+        currentId = parentMap.get(currentId);
+    }
+    
+    if (path[0] !== story.startNodeId) {
+        // Path is not connected to the start, so scores are 0
+        return scores;
+    }
+
+    // Traverse the reconstructed path and sum up choice predictions
+    for (let i = 0; i < path.length - 1; i++) {
+        const parentId = path[i];
+        const childId = path[i + 1];
+        const parentNode = story.nodes[parentId];
+
+        if (parentNode) {
+            const chosenChoice = parentNode.choices.find(c => c.nextNodeId === childId);
+            if (chosenChoice && chosenChoice.prediction !== 'none') {
+                scores[chosenChoice.prediction]++;
+            }
+        }
+    }
+
+    return scores;
 };
