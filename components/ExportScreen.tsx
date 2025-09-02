@@ -3,6 +3,7 @@ import { Story, StoryNode } from '../types';
 import { RefreshIcon, ArrowLeftIcon, HomeIcon, PdfIcon } from './Icon';
 import { generatePageMap } from '../utils/storyUtils';
 import LoadingSpinner from './LoadingSpinner';
+import StoryMetrics from './StoryMetrics';
 
 declare global {
     interface Window {
@@ -300,14 +301,17 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
     return (
         <>
             <div className="max-w-4xl mx-auto">
-                <div className="no-print bg-gray-800/50 p-4 rounded-lg shadow-lg border border-purple-500/30 mb-8 flex flex-wrap items-center justify-center gap-4">
-                    <button onClick={onReturnToGame} className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition"><ArrowLeftIcon/> Return to Game</button>
-                    <button onClick={handleShuffle} className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition"><RefreshIcon/> Shuffle Pages</button>
-                    <button onClick={handleExportToPdf} disabled={isExporting} className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:cursor-wait">
-                        {isExporting ? <LoadingSpinner /> : <PdfIcon />}
-                        {isExporting ? 'Exporting...' : 'Export to PDF'}
-                    </button>
-                    <button onClick={onRestart} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition"><HomeIcon/> Start New Story</button>
+                <div className="no-print bg-gray-800/50 p-4 rounded-lg shadow-lg border border-purple-500/30 mb-8 flex flex-col items-center gap-4">
+                    <div className="flex flex-wrap items-center justify-center gap-4">
+                        <button onClick={onReturnToGame} className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition"><ArrowLeftIcon/> Return to Game</button>
+                        <button onClick={handleShuffle} className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition"><RefreshIcon/> Shuffle Pages</button>
+                        <button onClick={handleExportToPdf} disabled={isExporting} className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:cursor-wait">
+                            {isExporting ? <LoadingSpinner /> : <PdfIcon />}
+                            {isExporting ? 'Exporting...' : 'Export to PDF'}
+                        </button>
+                        <button onClick={onRestart} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition"><HomeIcon/> Start New Story</button>
+                    </div>
+                    <StoryMetrics endingConditions={story.endingConditions} />
                 </div>
 
                 <div id="print-area">

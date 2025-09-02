@@ -3,6 +3,7 @@ import { Story } from '../types';
 import { generateStoryPrompt, generateImage, generateInitialStoryNode, generateTitle, generateCoverArtPromptKeywords } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
 import { UploadIcon, CopyIcon } from './Icon';
+import StoryMetrics from './StoryMetrics';
 
 interface SetupScreenProps {
     onStartGame: (story: Story) => void;
@@ -356,6 +357,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStartGame }) => {
                          <p className="text-xs text-gray-400"># of 'Mixed' choices to reach.</p>
                     </div>
                 </div>
+                <StoryMetrics endingConditions={endingConditions} />
             </div>
 
             <div className="space-y-4">
