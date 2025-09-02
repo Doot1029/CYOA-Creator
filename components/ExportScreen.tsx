@@ -89,7 +89,6 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
     
     const physicalPageMap = useMemo(() => {
         const map = new Map<string, number>();
-        let physicalPageCounter = 1;
         const tempPages: LayoutPage[] = [];
         
         // First pass: layout pages to get indices
@@ -102,8 +101,24 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
         for (const [nodeId] of sortedNodeEntries) {
             const node = story.nodes[nodeId];
             if (node) {
-                const wordLimit = node.illustrationUrl ? MAX_WORDS_ILLUSTRATED : MAX_WORDS_NO_ILLUSTRATION;
-                const dialogueChunks = splitTextIntoChunksByWordCount(node.dialogue, wordLimit);
+                 const dialogueChunks: string[] = [];
+                if (node.dialogue.trim()) {
+                    if (node.illustrationUrl) {
+                        const words = node.dialogue.split(' ');
+                        const firstChunkWords = words.slice(0, MAX_WORDS_ILLUSTRATED);
+                        dialogueChunks.push(firstChunkWords.join(' '));
+                        const remainingWords = words.slice(MAX_WORDS_ILLUSTRATED);
+                        if (remainingWords.length > 0) {
+                            const remainingText = remainingWords.join(' ');
+                            const subsequentChunks = splitTextIntoChunksByWordCount(remainingText, MAX_WORDS_NO_ILLUSTRATION);
+                            dialogueChunks.push(...subsequentChunks);
+                        }
+                    } else {
+                        const chunks = splitTextIntoChunksByWordCount(node.dialogue, MAX_WORDS_NO_ILLUSTRATION);
+                        dialogueChunks.push(...chunks);
+                    }
+                }
+                
                 dialogueChunks.forEach((chunk, index) => {
                     tempPages.push({
                         type: 'node',
@@ -138,8 +153,23 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
         for (const [nodeId] of sortedNodeEntries) {
             const node = story.nodes[nodeId];
             if (node) {
-                const wordLimit = node.illustrationUrl ? MAX_WORDS_ILLUSTRATED : MAX_WORDS_NO_ILLUSTRATION;
-                const dialogueChunks = splitTextIntoChunksByWordCount(node.dialogue, wordLimit);
+                const dialogueChunks: string[] = [];
+                if (node.dialogue.trim()) {
+                    if (node.illustrationUrl) {
+                        const words = node.dialogue.split(' ');
+                        const firstChunkWords = words.slice(0, MAX_WORDS_ILLUSTRATED);
+                        dialogueChunks.push(firstChunkWords.join(' '));
+                        const remainingWords = words.slice(MAX_WORDS_ILLUSTRATED);
+                        if (remainingWords.length > 0) {
+                            const remainingText = remainingWords.join(' ');
+                            const subsequentChunks = splitTextIntoChunksByWordCount(remainingText, MAX_WORDS_NO_ILLUSTRATION);
+                            dialogueChunks.push(...subsequentChunks);
+                        }
+                    } else {
+                        const chunks = splitTextIntoChunksByWordCount(node.dialogue, MAX_WORDS_NO_ILLUSTRATION);
+                        dialogueChunks.push(...chunks);
+                    }
+                }
                 
                 dialogueChunks.forEach((chunk, index) => {
                     nodePages.push({
