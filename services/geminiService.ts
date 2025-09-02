@@ -212,7 +212,15 @@ export const generateStoryNode = async (story: Story, fromNodeId: string, choice
                 },
                 choices: {
                     type: Type.ARRAY,
-                    description: "This MUST be an empty array as it is an ending."
+                    description: "This MUST be an empty array as it is an ending.",
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            text: { type: Type.STRING },
+                            prediction: { type: Type.STRING },
+                            predictionRationale: { type: Type.STRING }
+                        }
+                    }
                 }
             }
         };
