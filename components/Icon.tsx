@@ -89,9 +89,9 @@ export const ThumbsDownIcon: React.FC = () => (
     </svg>
 );
 
-export const BalanceIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a2 2 0 002 2h14a2 2 0 002-2l-3-9m-11 0l3-1m5 1l-3-1m0 0l-3 1m5-1V3m-3 13h6" />
+export const MinusCircleIcon: React.FC<{className?: string}> = ({className = "h-5 w-5"}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
 );
 

@@ -1,9 +1,11 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Story, StoryNode, Choice, ChoicePrediction } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { generateImage, editStoryNodeDialogue, generateIllustrationPromptKeywords } from '../services/geminiService';
-import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, InfoIcon, RefreshIcon, BalanceIcon } from './Icon';
+import { EditIcon, TrashIcon, PlusIcon, BookIcon, UploadIcon, CopyIcon, CheckIcon, DownloadIcon, WandIcon, BrainIcon, ThumbsUpIcon, ThumbsDownIcon, InfoIcon, RefreshIcon, MinusCircleIcon } from './Icon';
+import StoryMetrics from './StoryMetrics';
 
 interface GameScreenProps {
     story: Story;
@@ -315,6 +317,22 @@ const GameScreen: React.FC<GameScreenProps> = ({
         }
     };
 
+    const handleEndingConditionChange = (type: 'good' | 'bad' | 'mixed', value: string) => {
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue) && numValue >= 1) {
+            setStory(prev => {
+                if (!prev) return null;
+                return {
+                    ...prev,
+                    endingConditions: {
+                        ...prev.endingConditions,
+                        [type]: numValue
+                    }
+                };
+            });
+        }
+    };
+
     // --- AI Edit Handlers ---
     const handleAiSuggest = async (isRegeneration = false) => {
         if (!currentNode || !aiEditPrompt) return;
@@ -350,7 +368,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         if (direction === 'next' && currentSuggestionIndex < aiSuggestions.length - 1) {
             setCurrentSuggestionIndex(i => i + 1);
         } else if (direction === 'prev' && currentSuggestionIndex > 0) {
-            setCurrentSuggestionIndex(i => i - 1);
+            setCurrentSuggestionIndex(i => i + 1);
         }
     };
     
@@ -358,7 +376,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         switch (prediction) {
             case 'good': return <ThumbsUpIcon />;
             case 'bad': return <ThumbsDownIcon />;
-            case 'mixed': return <BalanceIcon />;
+            case 'mixed': return <MinusCircleIcon />;
             case 'none': default: return null;
         }
     };
@@ -382,8 +400,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
     );
 
     return (
-        <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 bg-gray-800/50 p-6 rounded-lg shadow-lg border border-purple-500/30 flex flex-col">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-8">
+            <div className="lg:col-span-3 bg-gray-800/50 p-6 rounded-lg shadow-lg border border-purple-500/30 flex flex-col">
                 <div 
                     className="relative mb-4"
                     onDragOver={handleDragOver}
@@ -452,7 +470,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
                     )}
                 </div>
             </div>
-            <div className="space-y-4">
+            <div className="lg:col-span-2 space-y-4">
                 <div className="bg-gray-800/50 p-6 rounded-lg shadow-lg border border-purple-500/30">
                     <h3 className="text-xl font-bold mb-4 font-title text-purple-300">Choices</h3>
                     <div className="space-y-3">
@@ -567,6 +585,46 @@ const GameScreen: React.FC<GameScreenProps> = ({
                             <>
                                 <button onClick={handleExportStoryData} className="w-full flex items-center justify-center gap-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition"><DownloadIcon /> Export Story Data</button>
                                  <button onClick={onExport} className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition"><BookIcon /> Export to Printable Book</button>
+                                 <div className="pt-4 mt-4 border-t border-purple-500/30">
+                                     <h4 className="text-lg font-bold font-title text-purple-300 mb-2">Edit Ending Conditions</h4>
+                                     <p className="text-xs text-gray-400 mb-3">Adjust when the story concludes based on the number of choices of a certain type.</p>
+                                     <div className="grid grid-cols-3 gap-3">
+                                        <div className="flex flex-col gap-1">
+                                            <label htmlFor="good-ending-edit" className="font-bold text-green-400 text-sm">Good</label>
+                                            <input
+                                                type="number"
+                                                id="good-ending-edit"
+                                                min="1"
+                                                value={story.endingConditions.good}
+                                                onChange={e => handleEndingConditionChange('good', e.target.value)}
+                                                className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-green-500 focus:outline-none transition text-sm"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label htmlFor="bad-ending-edit" className="font-bold text-red-400 text-sm">Bad</label>
+                                            <input
+                                                type="number"
+                                                id="bad-ending-edit"
+                                                min="1"
+                                                value={story.endingConditions.bad}
+                                                onChange={e => handleEndingConditionChange('bad', e.target.value)}
+                                                className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-red-500 focus:outline-none transition text-sm"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label htmlFor="mixed-ending-edit" className="font-bold text-yellow-400 text-sm">Mixed</label>
+                                            <input
+                                                type="number"
+                                                id="mixed-ending-edit"
+                                                min="1"
+                                                value={story.endingConditions.mixed}
+                                                onChange={e => handleEndingConditionChange('mixed', e.target.value)}
+                                                className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition text-sm"
+                                            />
+                                        </div>
+                                     </div>
+                                     <StoryMetrics endingConditions={story.endingConditions} />
+                                </div>
                             </>
                         )}
                     </div>

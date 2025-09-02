@@ -3,7 +3,6 @@ import { Story, StoryNode } from '../types';
 import { RefreshIcon, ArrowLeftIcon, HomeIcon, PdfIcon } from './Icon';
 import { generatePageMap } from '../utils/storyUtils';
 import LoadingSpinner from './LoadingSpinner';
-import StoryMetrics from './StoryMetrics';
 
 declare global {
     interface Window {
@@ -311,7 +310,6 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
                         </button>
                         <button onClick={onRestart} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition"><HomeIcon/> Start New Story</button>
                     </div>
-                    <StoryMetrics endingConditions={story.endingConditions} />
                 </div>
 
                 <div id="print-area">
