@@ -12,7 +12,6 @@ const getAi = (): GoogleGenAI => {
         return ai;
     }
     
-    // FIX: Use process.env.API_KEY as per the coding guidelines.
     const apiKey = process.env.API_KEY;
 
     if (!apiKey) {

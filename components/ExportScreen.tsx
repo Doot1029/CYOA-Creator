@@ -29,9 +29,6 @@ type Page =
         isLastChunk: boolean;
       };
 
-// FIX: Define a type for layout calculation to avoid issues with `Omit` on a discriminated union.
-// This helper type explicitly defines the shape of page objects before the dialogue chunk is added,
-// which helps TypeScript correctly identify it as a discriminated union.
 type LayoutPage =
     | { type: 'cover'; title: string; imageUrl: string; }
     | { type: 'back_cover'; prompt: string; }
@@ -82,6 +79,7 @@ const splitTextIntoChunksByWordCount = (text: string, wordLimit: number): string
 const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRestart }) => {
     const [pages, setPages] = useState<Page[]>([]);
     const [isExporting, setIsExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState('');
     
     const logicalPageMap = useMemo(() => {
         return generatePageMap(story.nodes, story.startNodeId);
@@ -234,7 +232,8 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
     const handleExportToPdf = async () => {
         if (isExporting) return;
         setIsExporting(true);
-        await new Promise(resolve => setTimeout(resolve, 50));
+        setExportProgress('Initializing export...');
+        await new Promise(resolve => setTimeout(resolve, 50)); // UI update tick
 
         try {
             const { jsPDF } = window.jspdf;
@@ -249,22 +248,37 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
                 return;
             }
 
-            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const totalPages = pageElements.length;
+            let pagesProcessed = 0;
+            setExportProgress(`Generating ${totalPages} page images... (0%)`);
 
+            // Generate all page images in parallel for speed
+            const imagePromises = pageElements.map(element =>
+                window.htmlToImage.toJpeg(element, {
+                    quality: 0.95,
+                    pixelRatio: 1.5
+                }).then(dataUrl => {
+                    pagesProcessed++;
+                    const percent = Math.round((pagesProcessed / totalPages) * 100);
+                    setExportProgress(`Generating ${totalPages} page images... (${percent}%)`);
+                    return dataUrl;
+                })
+            );
+
+            const dataUrls = await Promise.all(imagePromises);
+
+            setExportProgress('Assembling PDF...');
+            await new Promise(resolve => setTimeout(resolve, 50)); // UI update tick
+
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
             const margin = 10;
             const availableWidth = pdfWidth - margin * 2;
             const availableHeight = pdfHeight - margin * 2;
 
-            for (let i = 0; i < pageElements.length; i++) {
-                const element = pageElements[i];
-                
-                const dataUrl = await window.htmlToImage.toPng(element, { 
-                    quality: 1.0, 
-                    pixelRatio: 2
-                });
-
+            // Add images to the PDF
+            dataUrls.forEach((dataUrl, i) => {
                 const imgProps = pdf.getImageProperties(dataUrl);
                 const aspectRatio = imgProps.height / imgProps.width;
 
@@ -283,8 +297,8 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
                     pdf.addPage();
                 }
                 
-                pdf.addImage(dataUrl, 'PNG', x, y, imgWidth, imgHeight);
-            }
+                pdf.addImage(dataUrl, 'JPEG', x, y, imgWidth, imgHeight);
+            });
 
             const sanitizedTitle = story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             pdf.save(`${sanitizedTitle || 'cyoa_story'}.pdf`);
@@ -294,6 +308,7 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
             alert(`An error occurred while exporting to PDF: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsExporting(false);
+            setExportProgress('');
         }
     };
 
@@ -304,9 +319,9 @@ const ExportScreen: React.FC<ExportScreenProps> = ({ story, onReturnToGame, onRe
                     <div className="flex flex-wrap items-center justify-center gap-4">
                         <button onClick={onReturnToGame} className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition"><ArrowLeftIcon/> Return to Game</button>
                         <button onClick={handleShuffle} className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition"><RefreshIcon/> Shuffle Pages</button>
-                        <button onClick={handleExportToPdf} disabled={isExporting} className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:cursor-wait">
+                        <button onClick={handleExportToPdf} disabled={isExporting} className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-red-800 disabled:cursor-wait min-w-[180px]">
                             {isExporting ? <LoadingSpinner /> : <PdfIcon />}
-                            {isExporting ? 'Exporting...' : 'Export to PDF'}
+                            {isExporting ? exportProgress : 'Export to PDF'}
                         </button>
                         <button onClick={onRestart} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition"><HomeIcon/> Start New Story</button>
                     </div>

@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { useState, useCallback, useMemo } from 'react';
 import { GamePhase, Story, Choice, StoryNode, ChoicePrediction } from './types';
@@ -40,7 +41,6 @@ const App: React.FC = () => {
 
     const handleNavigate = useCallback(async (choice: Choice, fromNodeId: string) => {
         if (!story) return;
-        // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
         setLoading('loading');
 
         const newScores = { ...pathScores };
@@ -87,7 +87,6 @@ const App: React.FC = () => {
             console.error("Failed to generate next story node:", error);
             alert(`There was an error generating the next part of the story: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
             setLoading(null);
         }
     }, [story, pathScores]);
@@ -234,7 +233,6 @@ const App: React.FC = () => {
     
     const handleRegenerateNode = async (choice: Choice, fromNodeId: string) => {
         if (!story || !choice.nextNodeId) return;
-        // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
         setLoading('loading');
 
         // Recalculate scores up to the point *before* the node to be regenerated
@@ -277,14 +275,12 @@ const App: React.FC = () => {
             console.error("Failed to regenerate story node:", error);
             alert(`There was an error regenerating the story: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
             setLoading(null);
         }
     };
 
     const handleRegenerateChoices = async (nodeId: string) => {
         if (!story) return;
-        // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
         setLoading('loading');
         try {
             const { choices: newChoicesData } = await regenerateChoices(story, nodeId);
@@ -310,7 +306,6 @@ const App: React.FC = () => {
             console.error("Failed to regenerate choices:", error);
             alert(`An error occurred while regenerating choices: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            // FIX: Argument of type 'boolean' is not assignable to parameter of type 'SetStateAction<string>'.
             setLoading(null);
         }
     };
@@ -412,7 +407,6 @@ const App: React.FC = () => {
                                 onRegenerateNode={handleRegenerateNode}
                                 onRegenerateChoices={handleRegenerateChoices}
                                 onRequestDeleteNode={handleRequestDeleteNode}
-                                // FIX: Type 'string' is not assignable to type 'boolean'.
                                 loading={!!loading}
                             />
                         </>

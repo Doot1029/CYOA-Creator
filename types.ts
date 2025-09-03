@@ -37,7 +37,6 @@ export interface Story {
     endNodeIds: string[];
 }
 
-// FIX: Add Character type definition
 export interface Character {
     id: string;
     name: string;
